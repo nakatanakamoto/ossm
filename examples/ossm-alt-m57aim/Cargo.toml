@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-sossm = { path = "../../lib/sossm" }
-m57aim-motor = { path = "../../lib/m57aim-motor" }
-ossm-alt-board = { path = "../../lib/ossm-alt-board" }
+sossm = { path = "../../src/lib/sossm" }
+m57aim-motor = { path = "../../src/motors/m57aim" }
+ossm-alt-board = { path = "../../src/boards/ossm-alt" }
+esp-hal = { version = "1.0", features = ["unstable", "esp32s3"] }
+esp-hal-embassy = { version = "0.6", features = ["esp32s3"] }
+esp-backtrace = { version = "0.15", features = ["esp32s3", "panic-handler", "println"] }
+embassy-executor = { version = "0.7", features = ["nightly"] }

@@ -1,0 +1,11 @@
+[package]
+name = "m57aim-motor"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+sossm = { path = "../../lib/sossm" }
+embassy-time = "0.4"
+embedded-io-async = "0.6"
+heapless = "0.8"
+rmodbus = { version = "0.9", default-features = false, features = ["heapless"] }

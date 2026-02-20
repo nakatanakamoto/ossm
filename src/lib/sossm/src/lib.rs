@@ -1,12 +1,10 @@
 #![no_std]
 
-pub trait Motor {
-    fn new() -> Self;
-}
+mod motor;
+mod board;
 
-pub trait Board {
-    fn new() -> Self;
-}
+pub use motor::Motor;
+pub use board::Board;
 
 pub struct Sossm {}
 
