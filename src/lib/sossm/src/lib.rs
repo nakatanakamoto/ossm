@@ -4,7 +4,7 @@ mod motor;
 mod board;
 mod mechanical;
 
-pub use motor::Motor;
+pub use motor::{Motor, MotorTelemetry};
 pub use board::Board;
 pub use mechanical::MechanicalConfig;
 

@@ -20,11 +20,12 @@ esp_bootloader_esp_idf::esp_app_desc!();
 
 #[esp_rtos::main]
 async fn main(_spawner: Spawner) {
-    let mechanical_config = MechanicalConfig::default();
     let peripherals = esp_hal::init(esp_hal::Config::default());
-    let mut board = OssmAltBoard::<M57AIMMotor<_>>::new(peripherals, mechanical_config);
+    let mechanical_config = MechanicalConfig::default();
 
-    let _ = &board.move_to(10_f32).await;
+    let mut board = OssmAltBoard::<M57AIMMotor<_, _>>::new(peripherals, mechanical_config);
+
+    let _ = board.move_to(10_f32);
 
     loop {}
 }

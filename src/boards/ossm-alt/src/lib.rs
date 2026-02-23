@@ -1,7 +1,8 @@
 #![no_std]
 
 use esp_hal::{
-    Async,
+    Blocking,
+    delay::Delay,
     peripherals::Peripherals,
     timer::timg::TimerGroup,
     uart::{Config, Uart},
@@ -15,7 +16,10 @@ pub struct OssmAltBoard<M: Motor> {
     config: MechanicalConfig,
 }
 
-impl<M: Motor<Transport = Uart<'static, Async>>> OssmAltBoard<M> {
+impl<M> OssmAltBoard<M>
+where
+    M: Motor + From<(Uart<'static, Blocking>, Delay)>,
+{
     pub fn new(p: Peripherals, config: MechanicalConfig) -> Self {
         let timg0 = TimerGroup::new(p.TIMG0);
         esp_rtos::start(timg0.timer0);
@@ -25,8 +29,7 @@ impl<M: Motor<Transport = Uart<'static, Async>>> OssmAltBoard<M> {
             .expect("Failed to initialize UART")
             .with_tx(p.GPIO10)
             .with_rx(p.GPIO12)
-            .with_rts(p.GPIO11)
-            .into_async();
+            .with_rts(p.GPIO11);
 
         // Enable RS485 half-duplex mode — hardware drives DE high before TX
         // and low after the stop bit automatically (dl1_en).
@@ -34,8 +37,10 @@ impl<M: Motor<Transport = Uart<'static, Async>>> OssmAltBoard<M> {
         regs.rs485_conf()
             .modify(|_, w| w.rs485_en().set_bit().dl1_en().set_bit());
 
+        let delay = Delay::new();
+
         Self {
-            motor: M::from(uart),
+            motor: M::from((uart, delay)),
             config,
         }
     }

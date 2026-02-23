@@ -1,19 +1,22 @@
 #![no_std]
 
-use embassy_time::{Duration, Timer, with_timeout};
-use embedded_io_async::{ErrorType, Read, Write};
+use embedded_hal::delay::DelayNs;
+use embedded_io::{ErrorType, Read, Write};
 use heapless::Vec;
 use rmodbus::{ModbusProto, client::ModbusRequest, guess_response_frame_len};
-use sossm::Motor;
+use sossm::{Motor, MotorTelemetry};
 
 const PROTO: ModbusProto = ModbusProto::Rtu;
 const MIN_REG_READ_REQUIRED: usize = 3;
-
-const MOTOR_TIMEOUT: Duration = Duration::from_micros(10_000);
-const MOTOR_SHORT_TIMEOUT: Duration = Duration::from_micros(3_000);
-pub const MOTOR_CONSECUTIVE_READ_DELAY: Duration = Duration::from_micros(2_000);
-
 const MAX_REG_READ_AT_ONCE: usize = 8;
+
+// Retry limit for blocking reads before declaring a timeout.
+// Each retry is a tight loop iteration; the motor typically responds within a few hundred iterations.
+const MOTOR_TIMEOUT_RETRIES: usize = 500;
+const INTER_COMMAND_DELAY_US: u32 = 2_000;
+const HOME_STEP_THRESHOLD: i32 = 15;
+const HOME_SPEED_RPM: u16 = 80;
+const HOME_MAX_OUTPUT: u16 = 89;
 
 pub const MAX_MOTOR_SPEED_RPM: u16 = 3000;
 
@@ -92,56 +95,59 @@ fn calc_crc16(frame: &[u8], data_length: u8) -> u16 {
     crc
 }
 
-pub struct M57AIMMotor<UART> {
+pub struct M57AIMMotor<UART, DELAY> {
     uart: UART,
+    delay: DELAY,
 }
 
-impl<UART: Read + Write> From<UART> for M57AIMMotor<UART> {
-    fn from(uart: UART) -> Self {
-        Self::new(uart)
-    }
-}
-
-impl<UART> M57AIMMotor<UART>
+impl<UART, DELAY> From<(UART, DELAY)> for M57AIMMotor<UART, DELAY>
 where
     UART: Read + Write,
+    DELAY: DelayNs,
 {
-    pub fn new(uart: UART) -> Self {
-        Self { uart }
+    fn from((uart, delay): (UART, DELAY)) -> Self {
+        Self::new(uart, delay)
+    }
+}
+
+impl<UART, DELAY> M57AIMMotor<UART, DELAY>
+where
+    UART: Read + Write,
+    DELAY: DelayNs,
+{
+    pub fn new(uart: UART, delay: DELAY) -> Self {
+        Self { uart, delay }
     }
 
-    pub fn release(self) -> UART {
-        self.uart
+    pub fn release(self) -> (UART, DELAY) {
+        (self.uart, self.delay)
     }
 
-    async fn read_with_given_timeout(
+    fn read_exact(
         &mut self,
         buf: &mut [u8],
-        timeout: Duration,
     ) -> Result<(), MotorError<<UART as ErrorType>::Error>> {
-        with_timeout(timeout, async {
-            let mut remaining = buf;
-            while !remaining.is_empty() {
-                match self.uart.read(remaining).await {
-                    Ok(0) => {}
-                    Ok(n) => remaining = &mut remaining[n..],
-                    Err(e) => return Err(MotorError::UartError(e)),
+        let mut remaining = buf;
+        let mut retries = 0;
+        while !remaining.is_empty() {
+            match self.uart.read(remaining) {
+                Ok(0) => {
+                    retries += 1;
+                    if retries >= MOTOR_TIMEOUT_RETRIES {
+                        return Err(MotorError::Timeout);
+                    }
                 }
+                Ok(n) => {
+                    retries = 0;
+                    remaining = &mut remaining[n..];
+                }
+                Err(e) => return Err(MotorError::UartError(e)),
             }
-            Ok(())
-        })
-        .await
-        .map_err(|_| MotorError::Timeout)?
+        }
+        Ok(())
     }
 
-    async fn read_with_timeout(
-        &mut self,
-        buf: &mut [u8],
-    ) -> Result<(), MotorError<<UART as ErrorType>::Error>> {
-        self.read_with_given_timeout(buf, MOTOR_TIMEOUT).await
-    }
-
-    pub async fn write_register(
+    pub fn write_register(
         &mut self,
         reg: &ReadWriteMotorRegisters,
         val: u16,
@@ -155,30 +161,27 @@ where
 
         self.uart
             .write_all(&request)
-            .await
             .map_err(MotorError::UartError)?;
-        self.uart.flush().await.map_err(MotorError::UartError)?;
+        self.uart.flush().map_err(MotorError::UartError)?;
 
         let mut response = [0u8; 32];
-        self.read_with_timeout(&mut response[0..MIN_REG_READ_REQUIRED])
-            .await?;
+        self.read_exact(&mut response[0..MIN_REG_READ_REQUIRED])?;
 
         let len = guess_response_frame_len(&response[0..MIN_REG_READ_REQUIRED], PROTO)
             .expect("Failed to guess frame len") as usize;
         if len > MIN_REG_READ_REQUIRED {
-            self.read_with_timeout(&mut response[MIN_REG_READ_REQUIRED..len])
-                .await?;
+            self.read_exact(&mut response[MIN_REG_READ_REQUIRED..len])?;
         }
         let response = &response[0..len];
 
         modbus_req.parse_ok(response).expect("Modbus error");
 
-        Timer::after(MOTOR_CONSECUTIVE_READ_DELAY).await;
+        self.delay.delay_us(INTER_COMMAND_DELAY_US);
 
         Ok(())
     }
 
-    pub async fn read_registers<T: ReadableMotorRegister>(
+    pub fn read_registers<T: ReadableMotorRegister>(
         &mut self,
         reg: &T,
         count: u16,
@@ -192,19 +195,16 @@ where
 
         self.uart
             .write_all(&request)
-            .await
             .map_err(MotorError::UartError)?;
-        self.uart.flush().await.map_err(MotorError::UartError)?;
+        self.uart.flush().map_err(MotorError::UartError)?;
 
         let mut response = [0u8; 32];
-        self.read_with_timeout(&mut response[0..MIN_REG_READ_REQUIRED])
-            .await?;
+        self.read_exact(&mut response[0..MIN_REG_READ_REQUIRED])?;
 
         let len = guess_response_frame_len(&response[0..MIN_REG_READ_REQUIRED], PROTO)
             .expect("Failed to guess frame len") as usize;
         if len > MIN_REG_READ_REQUIRED {
-            self.read_with_timeout(&mut response[MIN_REG_READ_REQUIRED..len])
-                .await?;
+            self.read_exact(&mut response[MIN_REG_READ_REQUIRED..len])?;
         }
         let response = &response[0..len];
 
@@ -213,53 +213,67 @@ where
             .parse_u16(response, &mut res)
             .expect("Failed to parse response reg");
 
-        Timer::after(MOTOR_CONSECUTIVE_READ_DELAY).await;
+        self.delay.delay_us(INTER_COMMAND_DELAY_US);
 
         Ok(res)
     }
 
-    pub async fn read_register<T: ReadableMotorRegister>(
+    pub fn read_register<T: ReadableMotorRegister>(
         &mut self,
         reg: &T,
     ) -> Result<u16, MotorError<<UART as ErrorType>::Error>> {
-        Ok(self.read_registers(reg, 1).await?[0])
+        Ok(self.read_registers(reg, 1)?[0])
+    }
+
+    fn get_remaining_steps_blocking(
+        &mut self,
+    ) -> Result<i32, MotorError<<UART as ErrorType>::Error>> {
+        let regs = self.read_registers(&ReadOnlyMotorRegisters::TargetPositionLowU16, 2)?;
+        let bytes = (((regs[1] as u32) << 16) | regs[0] as u32).to_le_bytes();
+        Ok(i32::from_le_bytes(bytes))
     }
 }
 
-impl<UART> Motor for M57AIMMotor<UART>
+impl<UART, DELAY> Motor for M57AIMMotor<UART, DELAY>
 where
     UART: Read + Write,
     <UART as ErrorType>::Error: core::fmt::Debug,
+    DELAY: DelayNs,
 {
     type Error = MotorError<<UART as ErrorType>::Error>;
-    type Transport = UART;
 
     const STEPS_PER_REV: u32 = 32768;
 
-    fn min_consecutive_write_delay() -> Duration {
-        MOTOR_CONSECUTIVE_READ_DELAY
-    }
-
-    async fn enable(&mut self, enable: bool) -> Result<(), Self::Error> {
+    fn enable(&mut self, enable: bool) -> Result<(), Self::Error> {
         if enable {
-            self.write_register(&ReadWriteMotorRegisters::ModbusEnable, 1)
-                .await?;
+            self.write_register(&ReadWriteMotorRegisters::ModbusEnable, 1)?;
             self.write_register(&ReadWriteMotorRegisters::DriverOutputEnable, 1)
-                .await
         } else {
-            self.write_register(&ReadWriteMotorRegisters::DriverOutputEnable, 0)
-                .await?;
+            self.write_register(&ReadWriteMotorRegisters::DriverOutputEnable, 0)?;
             self.write_register(&ReadWriteMotorRegisters::ModbusEnable, 0)
-                .await
         }
     }
 
-    async fn home(&mut self) -> Result<(), Self::Error> {
-        self.write_register(&ReadWriteMotorRegisters::SpecificFunction, 1)
-            .await
+    fn home(&mut self) -> Result<(), Self::Error> {
+        self.write_register(&ReadWriteMotorRegisters::MotorTargetSpeed, HOME_SPEED_RPM)?;
+        self.write_register(&ReadWriteMotorRegisters::StandstillMaxOutput, HOME_MAX_OUTPUT)?;
+        self.write_register(&ReadWriteMotorRegisters::SpecificFunction, 1)?;
+
+        loop {
+            let remaining = self.get_remaining_steps_blocking()?;
+            if remaining.abs() < HOME_STEP_THRESHOLD {
+                break;
+            }
+            self.delay.delay_us(INTER_COMMAND_DELAY_US * 2);
+        }
+
+        // Re-enable modbus — homing resets it to defaults
+        self.write_register(&ReadWriteMotorRegisters::ModbusEnable, 1)?;
+
+        Ok(())
     }
 
-    async fn set_absolute_position(&mut self, steps: i32) -> Result<(), Self::Error> {
+    fn set_absolute_position(&mut self, steps: i32) -> Result<(), Self::Error> {
         let mut request = [0u8; 8];
         let bytes = steps.to_be_bytes();
 
@@ -271,74 +285,65 @@ where
 
         self.uart
             .write_all(&request)
-            .await
             .map_err(MotorError::UartError)?;
-        self.uart.flush().await.map_err(MotorError::UartError)?;
+        self.uart.flush().map_err(MotorError::UartError)?;
 
         let mut response = [0u8; 8];
-        self.read_with_given_timeout(&mut response, MOTOR_SHORT_TIMEOUT)
-            .await?;
+        self.read_exact(&mut response)?;
 
         Ok(())
     }
 
+    fn set_speed(&mut self, rpm: u16) -> Result<(), Self::Error> {
+        self.write_register(&ReadWriteMotorRegisters::MotorTargetSpeed, rpm)
+    }
+
+    fn set_acceleration(&mut self, value: u16) -> Result<(), Self::Error> {
+        self.write_register(&ReadWriteMotorRegisters::MotorAcceleration, value)
+    }
+
+    fn set_max_output(&mut self, output: u16) -> Result<(), Self::Error> {
+        self.write_register(&ReadWriteMotorRegisters::StandstillMaxOutput, output)
+    }
+}
+
+impl<UART, DELAY> MotorTelemetry for M57AIMMotor<UART, DELAY>
+where
+    UART: Read + Write,
+    <UART as ErrorType>::Error: core::fmt::Debug,
+    DELAY: DelayNs,
+{
+    type Error = MotorError<<UART as ErrorType>::Error>;
+
     async fn get_absolute_position(&mut self) -> Result<i32, Self::Error> {
-        let regs = self
-            .read_registers(&ReadWriteMotorRegisters::AbsolutePositionLowU16, 2)
-            .await?;
+        let regs = self.read_registers(&ReadWriteMotorRegisters::AbsolutePositionLowU16, 2)?;
         let bytes = (((regs[1] as u32) << 16) | regs[0] as u32).to_le_bytes();
         Ok(i32::from_le_bytes(bytes))
     }
 
     async fn get_remaining_steps(&mut self) -> Result<i32, Self::Error> {
-        let regs = self
-            .read_registers(&ReadOnlyMotorRegisters::TargetPositionLowU16, 2)
-            .await?;
-        let bytes = (((regs[1] as u32) << 16) | regs[0] as u32).to_le_bytes();
-        Ok(i32::from_le_bytes(bytes))
-    }
-
-    async fn set_speed(&mut self, rpm: u16) -> Result<(), Self::Error> {
-        self.write_register(&ReadWriteMotorRegisters::MotorTargetSpeed, rpm)
-            .await
+        self.get_remaining_steps_blocking()
     }
 
     async fn get_speed(&mut self) -> Result<u16, Self::Error> {
         self.read_register(&ReadWriteMotorRegisters::MotorTargetSpeed)
-            .await
-    }
-
-    async fn set_acceleration(&mut self, value: u16) -> Result<(), Self::Error> {
-        self.write_register(&ReadWriteMotorRegisters::MotorAcceleration, value)
-            .await
     }
 
     async fn get_acceleration(&mut self) -> Result<u16, Self::Error> {
         self.read_register(&ReadWriteMotorRegisters::MotorAcceleration)
-            .await
-    }
-
-    async fn set_max_output(&mut self, output: u16) -> Result<(), Self::Error> {
-        self.write_register(&ReadWriteMotorRegisters::StandstillMaxOutput, output)
-            .await
     }
 
     async fn get_max_output(&mut self) -> Result<u16, Self::Error> {
         self.read_register(&ReadWriteMotorRegisters::StandstillMaxOutput)
-            .await
     }
 
     async fn get_current_amps(&mut self) -> Result<f32, Self::Error> {
-        let reg = self
-            .read_register(&ReadOnlyMotorRegisters::SystemCurrent)
-            .await?;
+        let reg = self.read_register(&ReadOnlyMotorRegisters::SystemCurrent)?;
         Ok(reg as f32 / 2000.0)
     }
 
     async fn get_voltage_volts(&mut self) -> Result<f32, Self::Error> {
-        let reg = self
-            .read_register(&ReadOnlyMotorRegisters::SystemVoltage)
-            .await?;
+        let reg = self.read_register(&ReadOnlyMotorRegisters::SystemVoltage)?;
         Ok(reg as f32 / 327.0)
     }
 }
