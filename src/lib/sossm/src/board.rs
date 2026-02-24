@@ -1,26 +1,16 @@
-use core::fmt::Debug;
-use crate::Motor;
+use crate::{MechanicalConfig, Motor};
 
+/// A hardware factory trait. Implementors initialize board peripherals and
+/// hand a ready-to-use motor to `Sossm`. The board struct itself is consumed
+/// by `into_motor` - it exists only to configure hardware, not to persist.
+///
+/// Board-specific extras (buttons, displays, etc.) live on the concrete board
+/// struct and are accessed before calling `into_motor`.
 pub trait Board {
-    type Error: Debug + From<<Self::M as Motor>::Error>;
-    type M: Motor;
+    type Motor: Motor;
 
-    fn motor(&mut self) -> &mut Self::M;
-    fn steps_per_mm(&self) -> f32;
+    fn mechanical_config(&self) -> &MechanicalConfig;
 
-    fn enable(&mut self, enable: bool) -> Result<(), Self::Error> {
-        self.motor().enable(enable)?;
-        Ok(())
-    }
-
-    fn home(&mut self) -> Result<(), Self::Error> {
-        self.motor().home()?;
-        Ok(())
-    }
-
-    fn move_to(&mut self, mm: f32) -> Result<(), Self::Error> {
-        let steps = (mm * self.steps_per_mm()) as i32;
-        self.motor().set_absolute_position(steps)?;
-        Ok(())
-    }
+    /// Consume the board and return the initialized motor.
+    fn into_motor(self) -> Self::Motor;
 }

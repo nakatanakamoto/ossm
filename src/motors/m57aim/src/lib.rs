@@ -13,6 +13,7 @@ const MAX_REG_READ_AT_ONCE: usize = 8;
 // Retry limit for blocking reads before declaring a timeout.
 // Each retry is a tight loop iteration; the motor typically responds within a few hundred iterations.
 const MOTOR_TIMEOUT_RETRIES: usize = 500;
+const RETRY_DELAY_US: u32 = 20; // 500 retries × 20µs ≈ 10ms total timeout
 const INTER_COMMAND_DELAY_US: u32 = 2_000;
 const HOME_STEP_THRESHOLD: i32 = 15;
 const HOME_SPEED_RPM: u16 = 80;
@@ -123,10 +124,7 @@ where
         (self.uart, self.delay)
     }
 
-    fn read_exact(
-        &mut self,
-        buf: &mut [u8],
-    ) -> Result<(), MotorError<<UART as ErrorType>::Error>> {
+    fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), MotorError<<UART as ErrorType>::Error>> {
         let mut remaining = buf;
         let mut retries = 0;
         while !remaining.is_empty() {
@@ -136,6 +134,7 @@ where
                     if retries >= MOTOR_TIMEOUT_RETRIES {
                         return Err(MotorError::Timeout);
                     }
+                    self.delay.delay_us(RETRY_DELAY_US);
                 }
                 Ok(n) => {
                     retries = 0;
@@ -244,19 +243,22 @@ where
 
     const STEPS_PER_REV: u32 = 32768;
 
-    fn enable(&mut self, enable: bool) -> Result<(), Self::Error> {
-        if enable {
-            self.write_register(&ReadWriteMotorRegisters::ModbusEnable, 1)?;
-            self.write_register(&ReadWriteMotorRegisters::DriverOutputEnable, 1)
-        } else {
-            self.write_register(&ReadWriteMotorRegisters::DriverOutputEnable, 0)?;
-            self.write_register(&ReadWriteMotorRegisters::ModbusEnable, 0)
-        }
+    fn enable(&mut self) -> Result<(), Self::Error> {
+        self.write_register(&ReadWriteMotorRegisters::ModbusEnable, 1)?;
+        self.write_register(&ReadWriteMotorRegisters::DriverOutputEnable, 1)
+    }
+
+    fn disable(&mut self) -> Result<(), Self::Error> {
+        self.write_register(&ReadWriteMotorRegisters::DriverOutputEnable, 0)?;
+        self.write_register(&ReadWriteMotorRegisters::ModbusEnable, 0)
     }
 
     fn home(&mut self) -> Result<(), Self::Error> {
         self.write_register(&ReadWriteMotorRegisters::MotorTargetSpeed, HOME_SPEED_RPM)?;
-        self.write_register(&ReadWriteMotorRegisters::StandstillMaxOutput, HOME_MAX_OUTPUT)?;
+        self.write_register(
+            &ReadWriteMotorRegisters::StandstillMaxOutput,
+            HOME_MAX_OUTPUT,
+        )?;
         self.write_register(&ReadWriteMotorRegisters::SpecificFunction, 1)?;
 
         loop {
@@ -267,7 +269,7 @@ where
             self.delay.delay_us(INTER_COMMAND_DELAY_US * 2);
         }
 
-        // Re-enable modbus — homing resets it to defaults
+        // Re-enable modbus - homing resets it to defaults
         self.write_register(&ReadWriteMotorRegisters::ModbusEnable, 1)?;
 
         Ok(())

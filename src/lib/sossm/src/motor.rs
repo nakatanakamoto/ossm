@@ -5,7 +5,8 @@ pub trait Motor {
 
     const STEPS_PER_REV: u32;
 
-    fn enable(&mut self, enable: bool) -> Result<(), Self::Error>;
+    fn enable(&mut self) -> Result<(), Self::Error>;
+    fn disable(&mut self) -> Result<(), Self::Error>;
     /// Home the motor. Blocks until homing is complete.
     fn home(&mut self) -> Result<(), Self::Error>;
 
