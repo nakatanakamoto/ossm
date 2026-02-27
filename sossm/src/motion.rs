@@ -160,6 +160,7 @@ impl<'a, M: Motor> MotionController<'a, M> {
     }
 
     async fn home(&mut self) {
+        self.state = MotionState::Disabled;
         let _ = self.motor.home().await;
 
         let steps = (self.min_position_mm * self.steps_per_mm) as i32;
