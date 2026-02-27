@@ -90,7 +90,7 @@ impl<'a, M: Motor> MotionController<'a, M> {
 
             // Enabled + Home → home then Ready
             (MotionState::Enabled, Command::Home) => {
-                self.do_home().await;
+                self.home().await;
             }
             // Enabled + Disable → Disabled
             (MotionState::Enabled, Command::Disable) => {
@@ -109,7 +109,7 @@ impl<'a, M: Motor> MotionController<'a, M> {
             }
             // Ready + Home → re-home
             (MotionState::Ready, Command::Home) => {
-                self.do_home().await;
+                self.home().await;
             }
             // Ready + Disable → Disabled
             (MotionState::Ready, Command::Disable) => {
@@ -127,7 +127,7 @@ impl<'a, M: Motor> MotionController<'a, M> {
             }
             // Moving + Home → home
             (MotionState::Moving, Command::Home) => {
-                self.do_home().await;
+                self.home().await;
             }
             // Moving + Disable → Disabled
             (MotionState::Moving, Command::Disable) => {
@@ -159,17 +159,16 @@ impl<'a, M: Motor> MotionController<'a, M> {
         }
     }
 
-    async fn do_home(&mut self) {
-        // Motor owns the entire homing sequence (trigger, poll, settle, restore)
+    async fn home(&mut self) {
         let _ = self.motor.home().await;
 
-        // Move to min offset
         let steps = (self.min_position_mm * self.steps_per_mm) as i32;
         let _ = self.motor.set_absolute_position(steps).await;
 
-        // Sync Ruckig state
         self.input.current_position[0] = self.min_position_mm;
         self.input.target_position[0] = self.min_position_mm;
+        self.input.current_velocity[0] = 0.0;
+        self.input.current_acceleration[0] = 0.0;
 
         self.homing_done.signal(());
         self.state = MotionState::Ready;
