@@ -11,15 +11,18 @@ use log::info;
 
 use embassy_executor::Spawner;
 use embassy_time::Delay;
-use embassy_time::{Duration, Ticker, Timer};
+use embassy_time::{Duration, Ticker};
 use esp_hal::interrupt::software::SoftwareInterruptControl;
 use esp_hal::timer::timg::TimerGroup;
 use esp_hal::{Blocking, gpio::Output, interrupt::Priority, uart::Uart};
 use esp_rtos::embassy::InterruptExecutor;
 use m57aim_motor::M57AIMMotor;
 use ossm_alt_board::{OssmAltBoard, Rs485};
+use core::cell::Cell;
+use pattern_engine::{PatternCtx, PatternInput, Pattern, SharedPatternInput, patterns::Simple};
 use sossm::{
-    CommandChannel, HomingSignal, MechanicalConfig, MotionController, MotionLimits, Sossm,
+    CommandChannel, HomingSignal, MechanicalConfig, MotionController, MotionLimits,
+    MoveCompleteSignal, Sossm,
 };
 use static_cell::StaticCell;
 
@@ -35,6 +38,9 @@ type ConcreteMotor = M57AIMMotor<Rs485<Uart<'static, Blocking>, Output<'static>>
 
 static COMMANDS: CommandChannel = CommandChannel::new();
 static HOMING_DONE: HomingSignal = HomingSignal::new();
+static MOVE_COMPLETE: MoveCompleteSignal = MoveCompleteSignal::new();
+static PATTERN_INPUT: SharedPatternInput =
+    SharedPatternInput::new(Cell::new(PatternInput::DEFAULT));
 static EXECUTOR_HIGH: StaticCell<InterruptExecutor<1>> = StaticCell::new();
 
 #[embassy_executor::task]
@@ -77,6 +83,7 @@ async fn main(_spawner: Spawner) {
         UPDATE_INTERVAL_SECS,
         &COMMANDS,
         &HOMING_DONE,
+        &MOVE_COMPLETE,
     );
 
     // Spawn the motion controller on a high-priority interrupt executor
@@ -93,12 +100,7 @@ async fn main(_spawner: Spawner) {
     sossm.enable();
     sossm.home().await;
 
-    // Hello world
-    sossm.set_speed(150.0);
-    sossm.move_to(100.0);
-
-    loop {
-        Timer::after(Duration::from_secs(5)).await;
-        info!("main loop heartbeat");
-    }
+    let mut ctx = PatternCtx::new(&COMMANDS, &MOVE_COMPLETE, &PATTERN_INPUT, Delay);
+    let mut pattern = Simple;
+    pattern.run(&mut ctx).await;
 }

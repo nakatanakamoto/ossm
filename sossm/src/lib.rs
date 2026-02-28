@@ -7,7 +7,7 @@ mod mechanical;
 mod motion;
 mod motor;
 
-pub use command::{Command, CommandChannel, HomingSignal};
+pub use command::{Command, CommandChannel, HomingSignal, MotionCommand, MoveCompleteSignal};
 pub use limits::MotionLimits;
 pub use mechanical::MechanicalConfig;
 pub use motion::MotionController;
@@ -24,6 +24,7 @@ pub use motor::{Motor, MotorTelemetry};
 pub struct Sossm<'a> {
     commands: &'a CommandChannel,
     homing_done: &'a HomingSignal,
+    move_complete: &'a MoveCompleteSignal,
     update_interval_secs: f64,
 }
 
@@ -40,6 +41,7 @@ impl<'a> Sossm<'a> {
         update_interval_secs: f64,
         commands: &'a CommandChannel,
         homing_done: &'a HomingSignal,
+        move_complete: &'a MoveCompleteSignal,
     ) -> (Self, MotionController<'a, M>) {
         let controller = MotionController::new(
             motor,
@@ -48,10 +50,12 @@ impl<'a> Sossm<'a> {
             update_interval_secs,
             commands,
             homing_done,
+            move_complete,
         );
         let handle = Self {
             commands,
             homing_done,
+            move_complete,
             update_interval_secs,
         };
         (handle, controller)
@@ -76,11 +80,23 @@ impl<'a> Sossm<'a> {
         self.homing_done.wait().await;
     }
 
-    pub fn move_to(&self, mm: f64) {
-        let _ = self.commands.try_send(Command::MoveTo(mm));
+    /// Move to a position expressed as a fraction of the machine range (0.0–1.0).
+    pub fn move_to(&self, position: f64) {
+        let _ = self.commands.try_send(Command::MoveTo(position));
     }
 
-    pub fn set_speed(&self, mm_s: f64) {
-        let _ = self.commands.try_send(Command::SetSpeed(mm_s));
+    /// Set velocity as a fraction of max velocity (0.0–1.0).
+    pub fn set_speed(&self, speed: f64) {
+        let _ = self.commands.try_send(Command::SetSpeed(speed));
+    }
+
+    /// Send a combined motion command (position + velocity). Fire-and-forget.
+    pub fn push_motion(&self, cmd: MotionCommand) {
+        let _ = self.commands.try_send(Command::Motion(cmd));
+    }
+
+    /// Wait for the current move to complete (Moving → Ready).
+    pub async fn wait_move_complete(&self) {
+        self.move_complete.wait().await;
     }
 }

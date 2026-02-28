@@ -1082,6 +1082,7 @@ dependencies = [
  "log",
  "m57aim-motor",
  "ossm-alt-board",
+ "pattern-engine",
  "sossm",
  "static_cell",
 ]
@@ -1091,6 +1092,15 @@ name = "paste"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
+
+[[package]]
+name = "pattern-engine"
+version = "0.1.0"
+dependencies = [
+ "embassy-sync 0.7.2",
+ "embedded-hal-async",
+ "sossm",
+]
 
 [[package]]
 name = "pin-project-lite"

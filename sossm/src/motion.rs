@@ -1,6 +1,6 @@
 use rsruckig::prelude::*;
 
-use crate::command::{Command, CommandChannel, HomingSignal};
+use crate::command::{Command, CommandChannel, HomingSignal, MoveCompleteSignal};
 use crate::{MechanicalConfig, MotionLimits, Motor};
 
 // Floor applied to velocity requests to prevent degenerate Ruckig inputs.
@@ -18,6 +18,7 @@ pub struct MotionController<'a, M: Motor> {
     motor: M,
     commands: &'a CommandChannel,
     homing_done: &'a HomingSignal,
+    move_complete: &'a MoveCompleteSignal,
     state: MotionState,
     steps_per_mm: f64,
     min_position_mm: f64,
@@ -40,6 +41,7 @@ impl<'a, M: Motor> MotionController<'a, M> {
         update_interval_secs: f64,
         commands: &'a CommandChannel,
         homing_done: &'a HomingSignal,
+        move_complete: &'a MoveCompleteSignal,
     ) -> Self {
         let steps_per_mm = config.steps_per_mm(M::STEPS_PER_REV) as f64;
 
@@ -56,6 +58,7 @@ impl<'a, M: Motor> MotionController<'a, M> {
             motor,
             commands,
             homing_done,
+            move_complete,
             state: MotionState::Disabled,
             steps_per_mm,
             min_position_mm: config.min_position_mm,
@@ -99,13 +102,18 @@ impl<'a, M: Motor> MotionController<'a, M> {
             }
 
             // Ready + MoveTo → Moving
-            (MotionState::Ready, Command::MoveTo(mm)) => {
-                self.begin_move(mm);
+            (MotionState::Ready, Command::MoveTo(fraction)) => {
+                self.begin_move(self.fraction_to_mm(fraction));
+                self.state = MotionState::Moving;
+            }
+            // Ready + Motion → set speed + begin move → Moving
+            (MotionState::Ready, Command::Motion(cmd)) => {
+                self.apply_motion(cmd);
                 self.state = MotionState::Moving;
             }
             // Ready + SetSpeed
-            (MotionState::Ready, Command::SetSpeed(mm_s)) => {
-                self.set_speed(mm_s);
+            (MotionState::Ready, Command::SetSpeed(fraction)) => {
+                self.set_speed(fraction * self.limits.max_velocity_mm_s);
             }
             // Ready + Home → re-home
             (MotionState::Ready, Command::Home) => {
@@ -118,12 +126,16 @@ impl<'a, M: Motor> MotionController<'a, M> {
             }
 
             // Moving + MoveTo → retarget (stay Moving)
-            (MotionState::Moving, Command::MoveTo(mm)) => {
-                self.begin_move(mm);
+            (MotionState::Moving, Command::MoveTo(fraction)) => {
+                self.begin_move(self.fraction_to_mm(fraction));
+            }
+            // Moving + Motion → retarget with new speed (stay Moving)
+            (MotionState::Moving, Command::Motion(cmd)) => {
+                self.apply_motion(cmd);
             }
             // Moving + SetSpeed
-            (MotionState::Moving, Command::SetSpeed(mm_s)) => {
-                self.set_speed(mm_s);
+            (MotionState::Moving, Command::SetSpeed(fraction)) => {
+                self.set_speed(fraction * self.limits.max_velocity_mm_s);
             }
             // Moving + Home → home
             (MotionState::Moving, Command::Home) => {
@@ -152,6 +164,7 @@ impl<'a, M: Motor> MotionController<'a, M> {
 
                     if result == RuckigResult::Finished {
                         self.state = MotionState::Ready;
+                        self.move_complete.signal(());
                     }
                 }
                 _ => {}
@@ -173,6 +186,15 @@ impl<'a, M: Motor> MotionController<'a, M> {
 
         self.homing_done.signal(());
         self.state = MotionState::Ready;
+    }
+
+    fn apply_motion(&mut self, cmd: crate::command::MotionCommand) {
+        self.set_speed(cmd.speed * self.limits.max_velocity_mm_s);
+        self.begin_move(self.fraction_to_mm(cmd.position));
+    }
+
+    fn fraction_to_mm(&self, fraction: f64) -> f64 {
+        self.min_position_mm + fraction * (self.max_position_mm - self.min_position_mm)
     }
 
     fn begin_move(&mut self, mm: f64) {
