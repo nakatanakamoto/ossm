@@ -1,14 +1,12 @@
 default:
     @just --list
 
-# Build ossm-alt-m57aim example for ESP32-S3
-build-ossm-alt-m57aim:
-    cargo +esp build -p ossm-alt-m57aim --target xtensa-esp32s3-none-elf -Z build-std=alloc,core
+build:
+    cargo +esp build -p ossm-alt-m57aim --target xtensa-esp32s3-none-elf -Z build-std=alloc,core --release
 
-# Flash ossm-alt-m57aim to a connected ESP32-S3
-flash-ossm-alt-m57aim:
-    cargo +esp build -p ossm-alt-m57aim --target xtensa-esp32s3-none-elf -Z build-std=alloc,core
-    espflash flash --monitor target/xtensa-esp32s3-none-elf/debug/ossm-alt-m57aim
+flash:
+    cargo +esp build -p ossm-alt-m57aim --target xtensa-esp32s3-none-elf -Z build-std=alloc,core --release
+    espflash flash --monitor target/xtensa-esp32s3-none-elf/release/ossm-alt-m57aim
 
 # Build all targets
-build-all: build-ossm-alt-m57aim
+build-all: build
