@@ -11,7 +11,7 @@ use esp_hal::{
     peripherals::{GPIO10, GPIO11, GPIO12, UART1},
     uart::{Config, Uart},
 };
-use sossm::{MechanicalConfig, Motor};
+use ossm::{MechanicalConfig, Motor};
 
 const MOTOR_BAUD_RATE: u32 = 115_200;
 

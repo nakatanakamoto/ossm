@@ -85,7 +85,7 @@ The project is split into several layers, each with a clear responsibility. Here
 │     Patterns      │     Controller       │
 │     (Feature)     │      (Feature)       │
 ├───────────────────┴──────────────────────┤
-│                 Sossm                    │
+│                  Ossm                    │
 │            (Public Control)              │
 ├──────────────────────────────────────────┤
 │            Motion Controller             │
@@ -97,13 +97,13 @@ The project is split into several layers, each with a clear responsibility. Here
 └────────────────────┴─────────────────────┘
 ```
 
-### Sossm (Public Control)
+### Ossm (Public Control)
 
-`Sossm` is the public-facing API that features and application code interact with. On its own it doesn't do anything - it simply exposes methods like `enable()`, `disable()`, `home()`, `move_to()`, and `set_speed()` that accept fractional values (0.0-1.0) and forwards them over a lock-free channel to the motion controller. It's up to features (like the pattern engine or a controller) to call these methods and drive the machine.
+`Ossm` is the public-facing API that features and application code interact with. On its own it doesn't do anything - it simply exposes methods like `enable()`, `disable()`, `home()`, `move_to()`, and `set_speed()` that accept fractional values (0.0-1.0) and forwards them over a lock-free channel to the motion controller. It's up to features (like the pattern engine or a controller) to call these methods and drive the machine.
 
 ### Motion Controller
 
-The motion controller is the real-time engine that runs on a high-priority interrupt executor. It receives commands from the `Sossm` channel, manages a state machine (Disabled → Enabled → Ready → Moving), and uses Ruckig for jerk-limited trajectory planning. Each update cycle it converts the planned trajectory into motor step commands. It also handles mechanical configuration (pulley teeth, belt pitch, travel limits) and motion limits (max velocity, acceleration, jerk).
+The motion controller is the real-time engine that runs on a high-priority interrupt executor. It receives commands from the `Ossm` channel, manages a state machine (Disabled → Enabled → Ready → Moving), and uses Ruckig for jerk-limited trajectory planning. Each update cycle it converts the planned trajectory into motor step commands. It also handles mechanical configuration (pulley teeth, belt pitch, travel limits) and motion limits (max velocity, acceleration, jerk).
 
 ### Boards
 
@@ -115,11 +115,11 @@ The `Motor` trait defines a hardware-agnostic interface that the motion controll
 
 ### Firmware
 
-A firmware crate is the final integration point that ties a specific board and motor together into a flashable binary. It initialises the board, creates the `Sossm` and `MotionController` pair, spawns the motion task on a real-time executor, runs the homing sequence, and then hands control to a pattern or application loop. Each supported hardware combination gets its own firmware crate.
+A firmware crate is the final integration point that ties a specific board and motor together into a flashable binary. It initialises the board, creates the `Ossm` and `MotionController` pair, spawns the motion task on a real-time executor, runs the homing sequence, and then hands control to a pattern or application loop. Each supported hardware combination gets its own firmware crate.
 
 ### Features
 
-Features are optional higher-level capabilities built on top of the core motion control. The pattern engine is the primary feature today - it defines a `Pattern` trait whose implementations describe repeating motion sequences (simple stroking, stop-and-go, teasing/pounding, etc.). Patterns read live user input (depth, stroke, velocity, sensation) and translate it into motion commands via the `Sossm` API. New patterns can be added by implementing the `Pattern` trait. Future features may include user remotes, mobile apps, or video game integrations - all built on top of the same public control layer.
+Features are optional higher-level capabilities built on top of the core motion control. The pattern engine is the primary feature today - it defines a `Pattern` trait whose implementations describe repeating motion sequences (simple stroking, stop-and-go, teasing/pounding, etc.). Patterns read live user input (depth, stroke, velocity, sensation) and translate it into motion commands via the `Ossm` API. New patterns can be added by implementing the `Pattern` trait. Future features may include user remotes, mobile apps, or video game integrations - all built on top of the same public control layer.
 
 ## Contributing
 
@@ -167,7 +167,7 @@ The dev container comes with Rust and all required tooling pre-installed, so you
 
 However, to flash firmware you need to expose the UART device to the container. Add a `runArgs` entry to `.devcontainer/devcontainer.json` with the path to your serial device:
 
-```jsonc
+```json
 {
   "name": "Rust",
   "image": "mcr.microsoft.com/devcontainers/rust:2-1-trixie",

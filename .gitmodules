@@ -1,3 +1,6 @@
 [submodule "ossm-rs"]
 	path = ossm-rs
 	url = https://github.com/orange-gem/ossm-rs.git
+[submodule "reference/ossm-rs"]
+	path = reference/ossm-rs
+	url = https://github.com/orange-gem/ossm-rs.git

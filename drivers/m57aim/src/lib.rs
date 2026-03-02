@@ -5,7 +5,7 @@ use embedded_io::{ErrorType, Read, Write};
 use heapless::Vec;
 use rmodbus::{ModbusProto, client::ModbusRequest, guess_response_frame_len};
 use crc::{Crc, CRC_16_MODBUS};
-use sossm::{Motor, MotorTelemetry};
+use ossm::{Motor, MotorTelemetry};
 
 const MODBUS_CRC: Crc<u16> = Crc::<u16>::new(&CRC_16_MODBUS);
 

@@ -20,9 +20,9 @@ use m57aim_motor::M57AIMMotor;
 use ossm_alt_board::{OssmAltBoard, Rs485};
 use core::cell::Cell;
 use pattern_engine::{PatternCtx, PatternInput, Pattern, SharedPatternInput, patterns::Simple};
-use sossm::{
+use ossm::{
     CommandChannel, HomingSignal, MechanicalConfig, MotionController, MotionLimits,
-    MoveCompleteSignal, Sossm,
+    MoveCompleteSignal, Ossm,
 };
 use static_cell::StaticCell;
 
@@ -76,7 +76,7 @@ async fn main(_spawner: Spawner) {
     );
     let config = board.mechanical_config().clone();
 
-    let (sossm, controller) = Sossm::new(
+    let (ossm, controller) = Ossm::new(
         board.into_motor(),
         &config,
         MotionLimits::default(),
@@ -94,11 +94,11 @@ async fn main(_spawner: Spawner) {
 
     info!(
         "Motion task started at {}ms interval",
-        sossm.update_interval_secs() * 1000.0
+        ossm.update_interval_secs() * 1000.0
     );
 
-    sossm.enable();
-    sossm.home().await;
+    ossm.enable();
+    ossm.home().await;
 
     let mut ctx = PatternCtx::new(&COMMANDS, &MOVE_COMPLETE, &PATTERN_INPUT, Delay);
     let mut pattern = Simple;

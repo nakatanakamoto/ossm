@@ -5,8 +5,8 @@ use embassy_time::{Delay, Duration, Ticker};
 use pattern_engine::patterns::Deeper;
 use pattern_engine::{patterns::Simple, Pattern, PatternCtx, PatternInput, SharedPatternInput};
 use sim_motor::SimMotor;
-use sossm::{
-    CommandChannel, HomingSignal, MechanicalConfig, Motor, MotionLimits, MoveCompleteSignal, Sossm,
+use ossm::{
+    CommandChannel, HomingSignal, MechanicalConfig, Motor, MotionLimits, MoveCompleteSignal, Ossm,
 };
 use wasm_bindgen::prelude::*;
 
@@ -41,7 +41,7 @@ impl Simulator {
         let update_interval_secs = update_interval_ms / 1000.0;
         let motor = SimMotor::new(&MOTOR_POSITION);
 
-        let (sossm, mut controller) = Sossm::new(
+        let (ossm, mut controller) = Ossm::new(
             motor,
             &CONFIG,
             MotionLimits::default(),
@@ -64,8 +64,8 @@ impl Simulator {
 
         // Spawn the lifecycle + pattern loop
         wasm_bindgen_futures::spawn_local(async move {
-            sossm.enable();
-            sossm.home().await;
+            ossm.enable();
+            ossm.home().await;
 
             let mut ctx = PatternCtx::new(&COMMANDS, &MOVE_COMPLETE, &PATTERN_INPUT, Delay);
             let mut pattern = Deeper;

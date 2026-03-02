@@ -7,7 +7,7 @@ edition = "2024"
 crate-type = ["cdylib"]
 
 [dependencies]
-sossm = { path = "../../sossm" }
+ossm = { path = "../../ossm" }
 sim-motor = { path = "../../drivers/sim-motor" }
 pattern-engine = { path = "../../features/pattern-engine" }
 

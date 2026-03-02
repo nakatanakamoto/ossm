@@ -5,7 +5,7 @@ edition = "2024"
 rust-version = "1.88"
 
 [dependencies]
-sossm = { path = "../../sossm" }
+ossm = { path = "../../ossm" }
 pattern-engine = { path = "../../features/pattern-engine" }
 m57aim-motor = { path = "../../drivers/m57aim" }
 ossm-alt-board = { path = "../../boards/ossm-alt" }

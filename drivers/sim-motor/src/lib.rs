@@ -3,7 +3,7 @@
 use core::convert::Infallible;
 use core::sync::atomic::{AtomicI32, Ordering};
 
-use sossm::{Motor, MotorTelemetry};
+use ossm::{Motor, MotorTelemetry};
 
 const NOMINAL_VOLTAGE: f32 = 24.0;
 

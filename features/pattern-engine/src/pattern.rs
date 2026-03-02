@@ -1,5 +1,5 @@
 use embedded_hal_async::delay::DelayNs;
-use sossm::{CommandChannel, MotionCommand, MoveCompleteSignal, Command};
+use ossm::{CommandChannel, MotionCommand, MoveCompleteSignal, Command};
 
 use crate::input::{PatternInput, SharedPatternInput};
 use crate::util::scale;

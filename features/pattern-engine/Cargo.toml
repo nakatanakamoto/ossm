@@ -4,6 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-sossm = { path = "../../sossm" }
+ossm = { path = "../../ossm" }
 embassy-sync = { version = "0.7", default-features = false }
 embedded-hal-async = "1.0"

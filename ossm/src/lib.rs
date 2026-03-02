@@ -15,21 +15,21 @@ pub use motor::{Motor, MotorTelemetry};
 
 /// Lightweight command handle for application code.
 ///
-/// `Sossm` sends commands to a [`MotionController`] via a shared channel.
+/// `Ossm` sends commands to a [`MotionController`] via a shared channel.
 /// All methods take `&self` and are safe to call from any context — no mutex
 /// or critical section needed.
 ///
-/// Create both halves with [`Sossm::new()`], then hand the
+/// Create both halves with [`Ossm::new()`], then hand the
 /// [`MotionController`] to an interrupt or timer task.
-pub struct Sossm<'a> {
+pub struct Ossm<'a> {
     commands: &'a CommandChannel,
     homing_done: &'a HomingSignal,
     move_complete: &'a MoveCompleteSignal,
     update_interval_secs: f64,
 }
 
-impl<'a> Sossm<'a> {
-    /// Create a `Sossm` command handle and a [`MotionController`] engine,
+impl<'a> Ossm<'a> {
+    /// Create a `Ossm` command handle and a [`MotionController`] engine,
     /// both connected to the given `commands` channel.
     ///
     /// The returned `MotionController` should be spawned on an
