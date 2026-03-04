@@ -116,7 +116,7 @@ impl Simulator {
         });
     }
 
-    /// Set sensation value (-100.0 to 100.0). Meaning is pattern-specific.
+    /// Set sensation value (-1.0 to 1.0). Meaning is pattern-specific.
     pub fn set_sensation(&self, sensation: f64) {
         PATTERN_INPUT.lock(|cell| {
             let mut input = cell.get();

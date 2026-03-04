@@ -16,7 +16,7 @@ pub struct PatternInput {
     pub stroke: f64,
     /// Velocity as a fraction of max velocity (0.0–1.0).
     pub velocity: f64,
-    /// Sensation value (-100.0 to 100.0). Meaning is pattern-specific.
+    /// Sensation value (-1.0 to 1.0). Meaning is pattern-specific.
     pub sensation: f64,
 }
 

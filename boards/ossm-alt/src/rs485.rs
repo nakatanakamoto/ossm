@@ -7,6 +7,9 @@ use embedded_io::{ErrorType, Read, Write};
 ///
 /// Implements `Read + Write` so it can be used as a drop-in replacement
 /// for a plain UART in any driver that expects `embedded_io` traits.
+///
+/// This does the work that @orange_gem's fork of esp-hal did but without
+/// the additional dependency
 pub struct Rs485<UART, DE> {
     uart: UART,
     de: DE,

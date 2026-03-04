@@ -4,8 +4,8 @@ use ossm::{CommandChannel, MotionCommand, MoveCompleteSignal, Command};
 use crate::input::{PatternInput, SharedPatternInput};
 use crate::util::scale;
 
-pub const MIN_SENSATION: f64 = -100.0;
-pub const MAX_SENSATION: f64 = 100.0;
+pub const MIN_SENSATION: f64 = -1.0;
+pub const MAX_SENSATION: f64 = 1.0;
 
 /// An async pattern that drives repetitive motion.
 ///
@@ -46,7 +46,7 @@ impl<D: DelayNs> PatternCtx<D> {
         }
     }
 
-    /// Read the current sensation value (-100.0 to 100.0).
+    /// Read the current sensation value (-1.0 to 1.0).
     ///
     /// Re-read at each `.await` point to pick up live changes from BLE/UI.
     pub fn sensation(&self) -> f64 {
@@ -86,7 +86,7 @@ impl<D: DelayNs> PatternCtx<D> {
         self.delay.delay_ms(ms as u32).await;
     }
 
-    /// Map the current sensation (-100..100) to an output range.
+    /// Map the current sensation (-1.0..1.0) to an output range.
     pub fn scale_sensation(&self, out_min: f64, out_max: f64) -> f64 {
         scale(self.sensation(), MIN_SENSATION, MAX_SENSATION, out_min, out_max)
     }
