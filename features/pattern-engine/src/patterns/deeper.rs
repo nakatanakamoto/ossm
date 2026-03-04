@@ -18,7 +18,7 @@ impl Pattern for Deeper {
 
     async fn run(&mut self, ctx: &mut PatternCtx<impl DelayNs>) {
         loop {
-            let num_steps = ctx.scale_sensation(MIN_STEPS, MAX_STEPS) as usize;
+            let num_steps = (ctx.scale_sensation(MIN_STEPS, MAX_STEPS) as usize).max(1);
 
             for step in 1..=num_steps {
                 ctx.motion()

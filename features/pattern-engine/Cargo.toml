@@ -7,3 +7,4 @@ edition = "2024"
 ossm = { path = "../../ossm" }
 embassy-sync = { version = "0.7", default-features = false }
 embedded-hal-async = "1.0"
+embassy-futures = { version = "0.1", default-features = false }

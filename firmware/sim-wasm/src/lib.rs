@@ -2,8 +2,13 @@ use core::cell::Cell;
 use core::sync::atomic::{AtomicI32, Ordering};
 
 use embassy_time::{Delay, Duration, Ticker};
-use pattern_engine::patterns::Deeper;
-use pattern_engine::{Pattern, PatternCtx, PatternInput, SharedPatternInput};
+extern crate alloc;
+use alloc::string::String;
+
+use pattern_engine::{
+    AnyPattern, EngineCommand, EngineCommandChannel, Pattern, PatternEngine, PatternInput,
+    SharedPatternInput,
+};
 use sim_motor::SimMotor;
 use ossm::{
     CommandChannel, HomingSignal, MechanicalConfig, Motor, MotionLimits, MoveCompleteSignal, Ossm,
@@ -16,6 +21,7 @@ static MOVE_COMPLETE: MoveCompleteSignal = MoveCompleteSignal::new();
 static PATTERN_INPUT: SharedPatternInput =
     SharedPatternInput::new(Cell::new(PatternInput::DEFAULT));
 static MOTOR_POSITION: AtomicI32 = AtomicI32::new(0);
+static ENGINE_COMMANDS: EngineCommandChannel = EngineCommandChannel::new();
 
 const CONFIG: MechanicalConfig = MechanicalConfig {
     pulley_teeth: 20,
@@ -62,14 +68,21 @@ impl Simulator {
             }
         });
 
-        // Spawn the lifecycle + pattern loop
+        // Spawn the lifecycle + pattern engine loop
         wasm_bindgen_futures::spawn_local(async move {
             ossm.enable();
             ossm.home().await;
 
-            let mut ctx = PatternCtx::new(&COMMANDS, &MOVE_COMPLETE, &PATTERN_INPUT, Delay);
-            let mut pattern = Deeper;
-            pattern.run(&mut ctx).await;
+            let mut engine = PatternEngine::new(AnyPattern::all_builtin());
+            engine
+                .run(
+                    &ENGINE_COMMANDS,
+                    &COMMANDS,
+                    &MOVE_COMPLETE,
+                    &PATTERN_INPUT,
+                    Delay,
+                )
+                .await;
         });
 
         let steps_per_mm = CONFIG.steps_per_mm(SimMotor::STEPS_PER_REV) as f64;
@@ -123,5 +136,48 @@ impl Simulator {
             input.sensation = sensation;
             cell.set(input);
         });
+    }
+
+    /// Start playing the pattern at the given index.
+    pub fn play(&self, index: usize) {
+        let _ = ENGINE_COMMANDS.try_send(EngineCommand::Play(index));
+    }
+
+    /// Pause the currently playing pattern.
+    pub fn pause(&self) {
+        let _ = ENGINE_COMMANDS.try_send(EngineCommand::Pause);
+    }
+
+    /// Resume the most recently paused pattern.
+    pub fn resume(&self) {
+        let _ = ENGINE_COMMANDS.try_send(EngineCommand::Resume);
+    }
+
+    /// Stop playback entirely.
+    pub fn stop(&self) {
+        let _ = ENGINE_COMMANDS.try_send(EngineCommand::Stop);
+    }
+
+    /// Number of available patterns.
+    pub fn pattern_count(&self) -> usize {
+        AnyPattern::all_builtin().len()
+    }
+
+    /// Name of the pattern at the given index.
+    pub fn pattern_name(&self, index: usize) -> String {
+        let patterns = AnyPattern::all_builtin();
+        patterns
+            .get(index)
+            .map(|p| String::from(p.name()))
+            .unwrap_or_default()
+    }
+
+    /// Description of the pattern at the given index.
+    pub fn pattern_description(&self, index: usize) -> String {
+        let patterns = AnyPattern::all_builtin();
+        patterns
+            .get(index)
+            .map(|p| String::from(p.description()))
+            .unwrap_or_default()
     }
 }
