@@ -25,10 +25,7 @@ use esp_hal::system::Stack;
 use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
 use log::info;
-use ossm::{
-    CommandChannel, HomingSignal, MechanicalConfig, MotionController, MotionLimits, Motor,
-    MoveCompleteSignal, Ossm,
-};
+use ossm::{MechanicalConfig, MotionController, MotionLimits, Motor, Ossm, OssmChannels};
 use pattern_engine::{Pattern, PatternCtx, PatternInput, SharedPatternInput, patterns::Deeper};
 use sim_m5cores3_board::{Display, FrameState, create_terminal, render_ui};
 use sim_motor::SimMotor;
@@ -44,9 +41,7 @@ esp_bootloader_esp_idf::esp_app_desc!();
 
 const UPDATE_INTERVAL_SECS: f64 = 1.0 / 30.0;
 
-static COMMANDS: CommandChannel = CommandChannel::new();
-static HOMING_DONE: HomingSignal = HomingSignal::new();
-static MOVE_COMPLETE: MoveCompleteSignal = MoveCompleteSignal::new();
+static CHANNELS: OssmChannels = OssmChannels::new();
 static PATTERN_INPUT: SharedPatternInput = SharedPatternInput::new(Cell::new(PatternInput {
     depth: 0.7,
     stroke: 0.5,
@@ -171,9 +166,7 @@ async fn main(spawner: Spawner) {
         &config,
         MotionLimits::default(),
         UPDATE_INTERVAL_SECS,
-        &COMMANDS,
-        &HOMING_DONE,
-        &MOVE_COMPLETE,
+        &CHANNELS,
     );
 
     let sw_int = SoftwareInterruptControl::new(p.SW_INTERRUPT);
@@ -213,7 +206,7 @@ async fn main(spawner: Spawner) {
         ))
         .unwrap();
 
-    let mut ctx = PatternCtx::new(&COMMANDS, &MOVE_COMPLETE, &PATTERN_INPUT, Delay);
+    let mut ctx = PatternCtx::new(&CHANNELS, &PATTERN_INPUT, Delay);
     let mut pattern = Deeper;
     pattern.run(&mut ctx).await;
 }

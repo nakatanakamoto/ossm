@@ -7,7 +7,9 @@ mod mechanical;
 mod motion;
 mod motor;
 
-pub use command::{Command, CommandChannel, HomingSignal, MotionCommand, MoveCompleteSignal};
+pub use command::{
+    Command, CommandChannel, HomingSignal, MotionCommand, MoveCompleteSignal, OssmChannels,
+};
 pub use limits::MotionLimits;
 pub use mechanical::MechanicalConfig;
 pub use motion::MotionController;
@@ -22,15 +24,13 @@ pub use motor::{Motor, MotorTelemetry};
 /// Create both halves with [`Ossm::new()`], then hand the
 /// [`MotionController`] to an interrupt or timer task.
 pub struct Ossm<'a> {
-    commands: &'a CommandChannel,
-    homing_done: &'a HomingSignal,
-    move_complete: &'a MoveCompleteSignal,
+    channels: &'a OssmChannels,
     update_interval_secs: f64,
 }
 
 impl<'a> Ossm<'a> {
     /// Create a `Ossm` command handle and a [`MotionController`] engine,
-    /// both connected to the given `commands` channel.
+    /// both connected to the given channels.
     ///
     /// The returned `MotionController` should be spawned on an
     /// `InterruptExecutor` via [`MotionController::update()`].
@@ -39,23 +39,12 @@ impl<'a> Ossm<'a> {
         config: &MechanicalConfig,
         limits: MotionLimits,
         update_interval_secs: f64,
-        commands: &'a CommandChannel,
-        homing_done: &'a HomingSignal,
-        move_complete: &'a MoveCompleteSignal,
+        channels: &'a OssmChannels,
     ) -> (Self, MotionController<'a, M>) {
-        let controller = MotionController::new(
-            motor,
-            config,
-            limits,
-            update_interval_secs,
-            commands,
-            homing_done,
-            move_complete,
-        );
+        let controller =
+            MotionController::new(motor, config, limits, update_interval_secs, channels);
         let handle = Self {
-            commands,
-            homing_done,
-            move_complete,
+            channels,
             update_interval_secs,
         };
         (handle, controller)
@@ -66,37 +55,37 @@ impl<'a> Ossm<'a> {
     }
 
     pub fn enable(&self) {
-        let _ = self.commands.try_send(Command::Enable);
+        let _ = self.channels.commands.try_send(Command::Enable);
     }
 
     pub fn disable(&self) {
-        let _ = self.commands.try_send(Command::Disable);
+        let _ = self.channels.commands.try_send(Command::Disable);
     }
 
     /// Send a Home command and wait for homing to complete.
     pub async fn home(&self) {
-        self.homing_done.reset();
-        let _ = self.commands.try_send(Command::Home);
-        self.homing_done.wait().await;
+        self.channels.homing_done.reset();
+        let _ = self.channels.commands.try_send(Command::Home);
+        self.channels.homing_done.wait().await;
     }
 
     /// Move to a position expressed as a fraction of the machine range (0.0–1.0).
     pub fn move_to(&self, position: f64) {
-        let _ = self.commands.try_send(Command::MoveTo(position));
+        let _ = self.channels.commands.try_send(Command::MoveTo(position));
     }
 
     /// Set velocity as a fraction of max velocity (0.0–1.0).
     pub fn set_speed(&self, speed: f64) {
-        let _ = self.commands.try_send(Command::SetSpeed(speed));
+        let _ = self.channels.commands.try_send(Command::SetSpeed(speed));
     }
 
     /// Send a combined motion command (position + velocity). Fire-and-forget.
     pub fn push_motion(&self, cmd: MotionCommand) {
-        let _ = self.commands.try_send(Command::Motion(cmd));
+        let _ = self.channels.commands.try_send(Command::Motion(cmd));
     }
 
     /// Wait for the current move to complete (Moving → Ready).
     pub async fn wait_move_complete(&self) {
-        self.move_complete.wait().await;
+        self.channels.move_complete.wait().await;
     }
 }

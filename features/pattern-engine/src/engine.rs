@@ -2,7 +2,7 @@ use embassy_futures::select::{self, Either};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
 use embedded_hal_async::delay::DelayNs;
-use ossm::{CommandChannel, MoveCompleteSignal};
+use ossm::OssmChannels;
 
 use crate::any_pattern::AnyPattern;
 use crate::input::SharedPatternInput;
@@ -47,10 +47,11 @@ enum EngineState {
 /// # Example (firmware)
 ///
 /// ```ignore
+/// static CHANNELS: OssmChannels = OssmChannels::new();
 /// static ENGINE_COMMANDS: EngineCommandChannel = EngineCommandChannel::new();
 ///
 /// let mut engine = PatternEngine::new(AnyPattern::all_builtin());
-/// engine.run(&ENGINE_COMMANDS, &COMMANDS, &MOVE_COMPLETE, &PATTERN_INPUT, Delay).await;
+/// engine.run(&ENGINE_COMMANDS, &CHANNELS, &PATTERN_INPUT, Delay).await;
 /// ```
 pub struct PatternEngine<const N: usize> {
     patterns: [AnyPattern; N],
@@ -100,8 +101,7 @@ impl<const N: usize> PatternEngine<N> {
     pub async fn run<D: DelayNs + Clone>(
         &mut self,
         engine_commands: &EngineCommandChannel,
-        motion_commands: &'static CommandChannel,
-        move_complete: &'static MoveCompleteSignal,
+        channels: &'static OssmChannels,
         input: &'static SharedPatternInput,
         delay: D,
     ) -> ! {
@@ -112,8 +112,7 @@ impl<const N: usize> PatternEngine<N> {
                     self.handle_command(cmd);
                 }
                 EngineState::Playing(idx) => {
-                    let mut ctx =
-                        PatternCtx::new(motion_commands, move_complete, input, delay.clone());
+                    let mut ctx = PatternCtx::new(channels, input, delay.clone());
 
                     let result = select::select(
                         self.patterns[idx].run(&mut ctx),

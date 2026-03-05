@@ -10,18 +10,14 @@ use pattern_engine::{
     SharedPatternInput,
 };
 use sim_motor::SimMotor;
-use ossm::{
-    CommandChannel, HomingSignal, MechanicalConfig, Motor, MotionLimits, MoveCompleteSignal, Ossm,
-};
+use ossm::{MechanicalConfig, Motor, MotionLimits, Ossm, OssmChannels};
 use wasm_bindgen::prelude::*;
 
-static COMMANDS: CommandChannel = CommandChannel::new();
-static HOMING_DONE: HomingSignal = HomingSignal::new();
-static MOVE_COMPLETE: MoveCompleteSignal = MoveCompleteSignal::new();
+static CHANNELS: OssmChannels = OssmChannels::new();
+static ENGINE_COMMANDS: EngineCommandChannel = EngineCommandChannel::new();
 static PATTERN_INPUT: SharedPatternInput =
     SharedPatternInput::new(Cell::new(PatternInput::DEFAULT));
 static MOTOR_POSITION: AtomicI32 = AtomicI32::new(0);
-static ENGINE_COMMANDS: EngineCommandChannel = EngineCommandChannel::new();
 
 const CONFIG: MechanicalConfig = MechanicalConfig {
     pulley_teeth: 20,
@@ -52,9 +48,7 @@ impl Simulator {
             &CONFIG,
             MotionLimits::default(),
             update_interval_secs,
-            &COMMANDS,
-            &HOMING_DONE,
-            &MOVE_COMPLETE,
+            &CHANNELS,
         );
 
         let interval_us = (update_interval_secs * 1_000_000.0) as u64;
@@ -75,13 +69,7 @@ impl Simulator {
 
             let mut engine = PatternEngine::new(AnyPattern::all_builtin());
             engine
-                .run(
-                    &ENGINE_COMMANDS,
-                    &COMMANDS,
-                    &MOVE_COMPLETE,
-                    &PATTERN_INPUT,
-                    Delay,
-                )
+                .run(&ENGINE_COMMANDS, &CHANNELS, &PATTERN_INPUT, Delay)
                 .await;
         });
 
