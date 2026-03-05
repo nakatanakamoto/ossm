@@ -3,12 +3,12 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 
-# Install Rust (minimal profile, no prompts)
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
-source "$HOME/.cargo/env"
+# Vercel has Rust pre-installed at /rust/bin
+export PATH="/rust/bin:$PATH"
 
-# Install wasm-pack
+# Install wasm-pack and the WASM compile target
 curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+rustup target add wasm32-unknown-unknown
 
 # Build the WASM package
 cd "$REPO_ROOT"
