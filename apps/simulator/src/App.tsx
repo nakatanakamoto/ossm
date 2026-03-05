@@ -157,7 +157,7 @@ export default function App() {
               </Flex>
             }
           >
-            <Scene ref={sceneRef} simulator={simulator} />
+            <Scene ref={sceneRef} simulator={simulator} zoom={isMobile ? 900 : 1500} />
           </Suspense>
           <Button
             asChild

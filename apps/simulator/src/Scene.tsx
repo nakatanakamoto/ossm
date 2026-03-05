@@ -1,6 +1,18 @@
-import { useRef, useMemo, useCallback, useImperativeHandle, forwardRef, memo } from "react";
+import {
+  useRef,
+  useMemo,
+  useCallback,
+  useImperativeHandle,
+  forwardRef,
+  memo,
+} from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Environment, OrbitControls, OrthographicCamera, useGLTF } from "@react-three/drei";
+import {
+  Environment,
+  OrbitControls,
+  OrthographicCamera,
+  useGLTF,
+} from "@react-three/drei";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import {
   ACESFilmicToneMapping,
@@ -96,9 +108,11 @@ const RESET_SNAP_THRESHOLD = 0.0001;
 function SceneContent({
   simulator,
   handle,
+  zoom,
 }: {
   simulator: Simulator;
   handle: React.Ref<SceneHandle>;
+  zoom: number;
 }) {
   const [appearance] = useAppearance();
   const controlsRef = useRef<OrbitControlsImpl>(null);
@@ -147,25 +161,16 @@ function SceneContent({
 
   return (
     <>
-      <color
-        attach="background"
-        args={[isDark ? "#111113" : "#ffffff"]}
-      />
+      <color attach="background" args={[isDark ? "#111113" : "#ffffff"]} />
       <ambientLight intensity={isDark ? 0.4 : 0.8} />
-      <directionalLight
-        position={[1, 2, 3]}
-        intensity={isDark ? 0.8 : 1.5}
-      />
-      <directionalLight
-        position={[-1, 1, -1]}
-        intensity={isDark ? 0.3 : 0.5}
-      />
+      <directionalLight position={[1, 2, 3]} intensity={isDark ? 0.8 : 1.5} />
+      <directionalLight position={[-1, 1, -1]} intensity={isDark ? 0.3 : 0.5} />
       <Environment preset="studio" environmentIntensity={isDark ? 0.4 : 1} />
       <Model simulator={simulator} onOrbitTarget={onOrbitTarget} />
       <OrthographicCamera
         makeDefault
         position={INITIAL_CAMERA}
-        zoom={1500}
+        zoom={zoom}
         near={0.001}
         far={10}
       />
@@ -174,21 +179,19 @@ function SceneContent({
   );
 }
 
-const Scene = memo(forwardRef<
-  SceneHandle,
-  { simulator: Simulator }
->(function Scene({ simulator }, ref) {
-  return (
-    <Canvas
-      gl={{ toneMapping: ACESFilmicToneMapping, toneMappingExposure: 1.2 }}
-      style={{ width: "100%", height: "100%" }}
-    >
-      <SceneContent
-        simulator={simulator}
-        handle={ref}
-      />
-    </Canvas>
-  );
-}));
+const Scene = memo(
+  forwardRef<SceneHandle, { simulator: Simulator; zoom?: number }>(
+    function Scene({ simulator, zoom = 1500 }, ref) {
+      return (
+        <Canvas
+          gl={{ toneMapping: ACESFilmicToneMapping, toneMappingExposure: 1.2 }}
+          style={{ width: "100%", height: "100%" }}
+        >
+          <SceneContent simulator={simulator} handle={ref} zoom={zoom} />
+        </Canvas>
+      );
+    },
+  ),
+);
 
 export default Scene;
