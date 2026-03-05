@@ -22,7 +22,8 @@ jobs:
           github_token: ${{ github.token }}
 
       - name: Create release
-        run: gh release create "$TAG" --generate-notes --title "$TAG"
+        run: gh release create "$TAG" --title "$TAG" --notes "$NOTES"
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.tag.outputs.new_tag }}
+          NOTES: ${{ steps.tag.outputs.changelog }}
