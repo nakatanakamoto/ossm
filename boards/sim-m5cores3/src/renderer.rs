@@ -1,5 +1,3 @@
-/// Ratatui-powered renderer for the CoreS3 display via mousefood.
-/// 
 extern crate alloc;
 
 use alloc::boxed::Box;
@@ -62,7 +60,6 @@ pub fn render_ui(frame: &mut ratatui::Frame, state: &FrameState) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    // Vertical layout: FPS top, rail centred, details bottom
     let rows = Layout::vertical([
         Constraint::Length(1), // 0: FPS
         Constraint::Fill(1),   // 1: flex space
@@ -77,18 +74,15 @@ pub fn render_ui(frame: &mut ratatui::Frame, state: &FrameState) {
     ])
     .split(inner);
 
-    // FPS counter
     let mut fps_str = AllocString::with_capacity(8);
     let _ = write!(fps_str, "{} fps", state.fps);
     frame.render_widget(Paragraph::new(fps_str).alignment(Alignment::Right), rows[0]);
 
-    // OSSM Sim
     frame.render_widget(
         Paragraph::new(build_rail(state.position, inner.width as usize)),
         rows[2],
     );
 
-    // Details
     let mut pattern_line = AllocString::with_capacity(32);
     pattern_line.push_str("Pattern: ");
     pattern_line.push_str(state.pattern);

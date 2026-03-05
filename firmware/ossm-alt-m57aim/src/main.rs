@@ -163,7 +163,6 @@ async fn main(spawner: Spawner) {
             let mut current_pattern: usize = 0;
 
             loop {
-                // Wait for Enable from the remote
                 loop {
                     match REMOTE_EVENTS.receive().await {
                         RemoteEvent::Enable => break,
@@ -178,7 +177,6 @@ async fn main(spawner: Spawner) {
                     .send(EngineCommand::Play(current_pattern))
                     .await;
 
-                // Run patterns until disabled
                 loop {
                     match REMOTE_EVENTS.receive().await {
                         RemoteEvent::Disable => {

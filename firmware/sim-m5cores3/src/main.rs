@@ -156,7 +156,6 @@ async fn main(spawner: Spawner) {
         .with_sda(p.GPIO12)
         .with_scl(p.GPIO11);
 
-    // Enable display backlight
     sim_m5cores3_board::pmu::init(&mut i2c);
 
     let mut delay = esp_hal::delay::Delay::new();
@@ -227,7 +226,6 @@ async fn main(spawner: Spawner) {
         ))
         .unwrap();
 
-    // --- ESP-NOW initialization ---
     let radio = &*mk_static!(
         esp_radio::Controller<'static>,
         esp_radio::init().expect("Failed to initialize radio controller")
@@ -255,7 +253,6 @@ async fn main(spawner: Spawner) {
         max_travel_mm: mech_config.max_position_mm - mech_config.min_position_mm,
     };
 
-    // Spawn remote tasks
     spawner
         .spawn(ossm_m5_remote::receiver_task(
             manager,
@@ -279,7 +276,6 @@ async fn main(spawner: Spawner) {
 
     info!("ESP-NOW remote tasks started, waiting for connection...");
 
-    // --- Run pattern engine and remote event handler concurrently ---
     let mut engine = PatternEngine::new(AnyPattern::all_builtin());
 
     join(
@@ -288,7 +284,6 @@ async fn main(spawner: Spawner) {
             let mut current_pattern: usize = 0;
 
             loop {
-                // Wait for Enable from the remote
                 loop {
                     match REMOTE_EVENTS.receive().await {
                         RemoteEvent::Enable => break,
@@ -306,7 +301,6 @@ async fn main(spawner: Spawner) {
                     .send(EngineCommand::Play(current_pattern))
                     .await;
 
-                // Run patterns until disabled
                 loop {
                     match REMOTE_EVENTS.receive().await {
                         RemoteEvent::Disable => {

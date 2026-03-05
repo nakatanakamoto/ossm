@@ -20,7 +20,6 @@ const MAX_NO_REMOTE_HEARTBEAT_MS: u64 = 10_000;
 
 static LAST_HEARTBEAT: AtomicU64 = AtomicU64::new(0);
 static CONNECTED: AtomicBool = AtomicBool::new(false);
-/// Current pattern index in **engine** space.
 static CURRENT_PATTERN_IDX: AtomicU32 = AtomicU32::new(0);
 
 // ---------------------------------------------------------------------------
@@ -47,7 +46,6 @@ enum RemotePattern {
 }
 
 impl RemotePattern {
-    /// Parse the wire index sent by the M5 remote.
     fn from_remote_index(idx: u32) -> Option<Self> {
         match idx {
             0 => Some(Self::SimpleStroke),
@@ -62,7 +60,6 @@ impl RemotePattern {
         }
     }
 
-    /// Convert an engine pattern index to a remote pattern, if one exists.
     fn from_engine_index(idx: u32) -> Option<Self> {
         match idx {
             0 => Some(Self::SimpleStroke),
@@ -89,7 +86,6 @@ impl RemotePattern {
         }
     }
 
-    /// The wire index expected by the M5 remote.
     fn to_remote_index(self) -> u32 {
         match self {
             Self::SimpleStroke => 0,
@@ -199,8 +195,6 @@ async fn send_heartbeat_packet(
     }
 }
 
-/// Receives packets from the M5 remote, updates pattern input, and emits
-/// remote events for on/off/pattern changes.
 #[embassy_executor::task]
 pub async fn receiver_task(
     manager: &'static EspNowManager<'static>,
@@ -337,9 +331,6 @@ pub async fn receiver_task(
     }
 }
 
-/// Periodically sends heartbeat packets to the paired remote so it knows
-/// the OSSM is still alive. Includes max velocity and travel for the
-/// remote's UI.
 #[embassy_executor::task]
 pub async fn heartbeat_send_task(
     manager: &'static EspNowManager<'static>,
@@ -362,8 +353,6 @@ pub async fn heartbeat_send_task(
     }
 }
 
-/// Monitors incoming heartbeats from the remote. If none arrive within the
-/// timeout window, emits a [`RemoteEvent::Disable`] to shut down motion.
 #[embassy_executor::task]
 pub async fn heartbeat_check_task(remote_events: &'static RemoteEventChannel) {
     info!("ESP-NOW heartbeat check task started");
@@ -388,17 +377,14 @@ pub async fn heartbeat_check_task(remote_events: &'static RemoteEventChannel) {
     }
 }
 
-/// Returns whether the M5 remote is currently connected (heartbeats arriving).
 pub fn is_connected() -> bool {
     CONNECTED.load(Ordering::Acquire)
 }
 
-/// Sets the current pattern index (used by heartbeat to sync with remote).
 pub fn set_current_pattern(idx: u32) {
     CURRENT_PATTERN_IDX.store(idx, Ordering::Release);
 }
 
-/// Returns the current pattern index.
 pub fn current_pattern() -> u32 {
     CURRENT_PATTERN_IDX.load(Ordering::Acquire)
 }

@@ -15,25 +15,12 @@ pub use mechanical::MechanicalConfig;
 pub use motion::MotionController;
 pub use motor::{Motor, MotorTelemetry};
 
-/// Lightweight command handle for application code.
-///
-/// `Ossm` sends commands to a [`MotionController`] via a shared channel.
-/// All methods take `&self` and are safe to call from any context — no mutex
-/// or critical section needed.
-///
-/// Create both halves with [`Ossm::new()`], then hand the
-/// [`MotionController`] to an interrupt or timer task.
 pub struct Ossm<'a> {
     channels: &'a OssmChannels,
     update_interval_secs: f64,
 }
 
 impl<'a> Ossm<'a> {
-    /// Create a `Ossm` command handle and a [`MotionController`] engine,
-    /// both connected to the given channels.
-    ///
-    /// The returned `MotionController` should be spawned on an
-    /// `InterruptExecutor` via [`MotionController::update()`].
     pub fn new<M: Motor>(
         motor: M,
         config: &MechanicalConfig,
@@ -62,7 +49,6 @@ impl<'a> Ossm<'a> {
         let _ = self.channels.commands.try_send(Command::Disable);
     }
 
-    /// Send a Home command and wait for homing to complete.
     pub async fn home(&self) {
         self.channels.homing_done.reset();
         let _ = self.channels.commands.try_send(Command::Home);
@@ -79,12 +65,10 @@ impl<'a> Ossm<'a> {
         let _ = self.channels.commands.try_send(Command::SetSpeed(speed));
     }
 
-    /// Send a combined motion command (position + velocity). Fire-and-forget.
     pub fn push_motion(&self, cmd: MotionCommand) {
         let _ = self.channels.commands.try_send(Command::Motion(cmd));
     }
 
-    /// Wait for the current move to complete (Moving → Ready).
     pub async fn wait_move_complete(&self) {
         self.channels.move_complete.wait().await;
     }

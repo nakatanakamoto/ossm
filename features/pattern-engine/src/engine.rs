@@ -8,16 +8,11 @@ use crate::any_pattern::AnyPattern;
 use crate::input::SharedPatternInput;
 use crate::pattern::{Pattern, PatternCtx};
 
-/// Commands sent to the engine from UI/BLE/etc.
 #[derive(Debug, Clone, Copy)]
 pub enum EngineCommand {
-    /// Start playing the pattern at the given index.
     Play(usize),
-    /// Pause the currently playing pattern. Remembers which pattern was active.
     Pause,
-    /// Resume the most recently paused pattern.
     Resume,
-    /// Stop playback entirely. Forgets the paused pattern.
     Stop,
 }
 
@@ -27,32 +22,13 @@ pub enum EngineCommand {
 /// and senders are typically a single UI/BLE task.
 pub type EngineCommandChannel = Channel<CriticalSectionRawMutex, EngineCommand, 4>;
 
-/// Internal state machine.
 #[derive(Debug, Clone, Copy)]
 enum EngineState {
-    /// No pattern running, nothing to resume.
     Idle,
-    /// Pattern at index is actively running.
     Playing(usize),
-    /// Pattern at index was paused. Can be resumed.
     Paused(usize),
 }
 
-/// Manages a collection of patterns and drives them in response to commands.
-///
-/// The engine stores patterns in a fixed-size array (const generic `N`) and
-/// runs an async event loop that listens for [`EngineCommand`]s on an
-/// [`EngineCommandChannel`]. Use [`PatternEngine::run`] to start the loop.
-///
-/// # Example (firmware)
-///
-/// ```ignore
-/// static CHANNELS: OssmChannels = OssmChannels::new();
-/// static ENGINE_COMMANDS: EngineCommandChannel = EngineCommandChannel::new();
-///
-/// let mut engine = PatternEngine::new(AnyPattern::all_builtin());
-/// engine.run(&ENGINE_COMMANDS, &CHANNELS, &PATTERN_INPUT, Delay).await;
-/// ```
 pub struct PatternEngine<const N: usize> {
     patterns: [AnyPattern; N],
     state: EngineState,
@@ -66,24 +42,18 @@ impl<const N: usize> PatternEngine<N> {
         }
     }
 
-    /// Number of patterns available.
     pub fn pattern_count(&self) -> usize {
         N
     }
 
-    /// Name of the pattern at `index`, or `None` if out of bounds.
     pub fn pattern_name(&self, index: usize) -> Option<&'static str> {
         self.patterns.get(index).map(|p| p.name())
     }
 
-    /// Description of the pattern at `index`, or `None` if out of bounds.
     pub fn pattern_description(&self, index: usize) -> Option<&'static str> {
         self.patterns.get(index).map(|p| p.description())
     }
 
-    /// Iterator over `(index, name, description)` for all patterns.
-    ///
-    /// Useful for populating a UI list or BLE characteristic.
     pub fn pattern_list(&self) -> impl Iterator<Item = (usize, &'static str, &'static str)> + '_ {
         self.patterns
             .iter()
@@ -126,7 +96,6 @@ impl<const N: usize> PatternEngine<N> {
                             self.state = EngineState::Idle;
                         }
                         Either::Second(cmd) => {
-                            // Pattern cancelled (future dropped). Handle the command.
                             self.handle_command(cmd);
                         }
                     }

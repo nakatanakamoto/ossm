@@ -53,7 +53,6 @@ impl Simulator {
 
         let interval_us = (update_interval_secs * 1_000_000.0) as u64;
 
-        // Spawn the motion controller loop
         wasm_bindgen_futures::spawn_local(async move {
             let mut ticker = Ticker::every(Duration::from_micros(interval_us));
             loop {
@@ -62,7 +61,6 @@ impl Simulator {
             }
         });
 
-        // Spawn the lifecycle + pattern engine loop
         wasm_bindgen_futures::spawn_local(async move {
             ossm.enable();
             ossm.home().await;
@@ -126,32 +124,26 @@ impl Simulator {
         });
     }
 
-    /// Start playing the pattern at the given index.
     pub fn play(&self, index: usize) {
         let _ = ENGINE_COMMANDS.try_send(EngineCommand::Play(index));
     }
 
-    /// Pause the currently playing pattern.
     pub fn pause(&self) {
         let _ = ENGINE_COMMANDS.try_send(EngineCommand::Pause);
     }
 
-    /// Resume the most recently paused pattern.
     pub fn resume(&self) {
         let _ = ENGINE_COMMANDS.try_send(EngineCommand::Resume);
     }
 
-    /// Stop playback entirely.
     pub fn stop(&self) {
         let _ = ENGINE_COMMANDS.try_send(EngineCommand::Stop);
     }
 
-    /// Number of available patterns.
     pub fn pattern_count(&self) -> usize {
         AnyPattern::all_builtin().len()
     }
 
-    /// Name of the pattern at the given index.
     pub fn pattern_name(&self, index: usize) -> String {
         let patterns = AnyPattern::all_builtin();
         patterns
@@ -160,7 +152,6 @@ impl Simulator {
             .unwrap_or_default()
     }
 
-    /// Description of the pattern at the given index.
     pub fn pattern_description(&self, index: usize) -> String {
         let patterns = AnyPattern::all_builtin();
         patterns

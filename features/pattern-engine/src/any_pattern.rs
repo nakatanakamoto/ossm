@@ -19,7 +19,6 @@ pub enum AnyPattern {
 }
 
 impl AnyPattern {
-    /// Names of the built-in patterns, matching the order of [`Self::all_builtin`].
     pub const BUILTIN_NAMES: [&'static str; 7] = [
         "Simple Stroke",
         "Deeper",
@@ -30,7 +29,6 @@ impl AnyPattern {
         "None",
     ];
 
-    /// Returns an array of all built-in patterns in their default order.
     pub fn all_builtin() -> [AnyPattern; 7] {
         [
             AnyPattern::Simple(Simple),

@@ -1,8 +1,3 @@
-/// Operational motion limits passed to the trajectory planner.
-///
-/// These cap what patterns and commands can request. They should be set to
-/// values the machine can safely sustain - informed by mechanical construction
-/// and the motor's capabilities, but ultimately operator-configurable.
 #[derive(Debug, Clone)]
 pub struct MotionLimits {
     /// Maximum linear velocity (mm/s).

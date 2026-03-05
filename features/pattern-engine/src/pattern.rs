@@ -19,11 +19,6 @@ pub trait Pattern {
     async fn run(&mut self, ctx: &mut PatternCtx<impl DelayNs>);
 }
 
-/// Context object passed to patterns.
-///
-/// Provides move primitives that suspend until complete, delay support via
-/// a generic `DelayNs`, and access to live input (depth, stroke, velocity,
-/// sensation).
 pub struct PatternCtx<D: DelayNs> {
     channels: &'static OssmChannels,
     input: &'static SharedPatternInput,
@@ -78,7 +73,6 @@ impl<D: DelayNs> PatternCtx<D> {
         self.channels.move_complete.wait().await;
     }
 
-    /// Delay for the given number of milliseconds.
     pub async fn delay_ms(&mut self, ms: u64) {
         self.delay.delay_ms(ms as u32).await;
     }
@@ -89,10 +83,8 @@ impl<D: DelayNs> PatternCtx<D> {
     }
 }
 
-/// Typestate: position not yet set.
 pub struct NoPosition;
 
-/// Typestate: position has been set.
 pub struct HasPosition(f64);
 
 /// Builder for a single motion command.
@@ -106,7 +98,6 @@ pub struct MotionBuilder<'a, D: DelayNs, P> {
     torque: Option<f64>,
 }
 
-// speed() and torque() work in any position state.
 impl<'a, D: DelayNs, P> MotionBuilder<'a, D, P> {
     /// Set the velocity as a multiplier of the current input velocity.
     ///
@@ -140,7 +131,6 @@ impl<'a, D: DelayNs> MotionBuilder<'a, D, NoPosition> {
 }
 
 impl<'a, D: DelayNs> MotionBuilder<'a, D, HasPosition> {
-    /// Send the motion command and await completion.
     pub async fn send(self) {
         let input = self.ctx.input();
         let fraction = self.position.0.clamp(0.0, 1.0);

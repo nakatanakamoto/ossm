@@ -79,69 +79,55 @@ impl<'a, M: Motor> MotionController<'a, M> {
 
     async fn process_command(&mut self, cmd: Command) {
         match (&self.state, cmd) {
-            // Disabled + Enable → Enabled
             (MotionState::Disabled, Command::Enable) => {
                 let _ = self.motor.enable().await;
                 self.state = MotionState::Enabled;
             }
 
-            // Enabled + Home → home then Ready
             (MotionState::Enabled, Command::Home) => {
                 self.home().await;
             }
-            // Enabled + Disable → Disabled
             (MotionState::Enabled, Command::Disable) => {
                 let _ = self.motor.disable().await;
                 self.state = MotionState::Disabled;
             }
 
-            // Ready + MoveTo → Moving
             (MotionState::Ready, Command::MoveTo(fraction)) => {
                 self.begin_move(self.fraction_to_mm(fraction));
                 self.state = MotionState::Moving;
             }
-            // Ready + Motion → set speed + begin move → Moving
             (MotionState::Ready, Command::Motion(cmd)) => {
                 self.apply_motion(cmd);
                 self.state = MotionState::Moving;
             }
-            // Ready + SetSpeed
             (MotionState::Ready, Command::SetSpeed(fraction)) => {
                 self.set_speed(fraction * self.limits.max_velocity_mm_s);
             }
-            // Ready + Home → re-home
             (MotionState::Ready, Command::Home) => {
                 self.home().await;
             }
-            // Ready + Disable → Disabled
             (MotionState::Ready, Command::Disable) => {
                 let _ = self.motor.disable().await;
                 self.state = MotionState::Disabled;
             }
 
-            // Moving + MoveTo → retarget (stay Moving)
             (MotionState::Moving, Command::MoveTo(fraction)) => {
                 self.begin_move(self.fraction_to_mm(fraction));
             }
-            // Moving + Motion → retarget with new speed (stay Moving)
             (MotionState::Moving, Command::Motion(cmd)) => {
                 self.apply_motion(cmd);
             }
-            // Moving + SetSpeed
             (MotionState::Moving, Command::SetSpeed(fraction)) => {
                 self.set_speed(fraction * self.limits.max_velocity_mm_s);
             }
-            // Moving + Home → home
             (MotionState::Moving, Command::Home) => {
                 self.home().await;
             }
-            // Moving + Disable → Disabled
             (MotionState::Moving, Command::Disable) => {
                 let _ = self.motor.disable().await;
                 self.state = MotionState::Disabled;
             }
 
-            // All other combinations are ignored
             _ => {}
         }
     }
