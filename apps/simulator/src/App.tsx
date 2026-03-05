@@ -1,4 +1,11 @@
-import { Suspense, useRef, useState, useCallback, useEffect, useMemo } from "react";
+import {
+  Suspense,
+  useRef,
+  useState,
+  useCallback,
+  useEffect,
+  useMemo,
+} from "react";
 import { useSimulator } from "./hooks/useSimulator";
 import { useAppearance } from "./hooks/useAppearance";
 import { useIsMobile } from "./hooks/useIsMobile";
@@ -19,7 +26,12 @@ import {
   Separator,
   Tooltip,
 } from "@radix-ui/themes";
-import { SunIcon, MoonIcon, ResetIcon } from "@radix-ui/react-icons";
+import {
+  SunIcon,
+  MoonIcon,
+  ResetIcon,
+  GitHubLogoIcon,
+} from "@radix-ui/react-icons";
 import Scene from "./Scene";
 import type { SceneHandle } from "./Scene";
 
@@ -32,7 +44,10 @@ export default function App() {
   const [stroke, setStroke] = usePersistedState("ossm:stroke", 0.4);
   const [velocity, setVelocity] = usePersistedState("ossm:velocity", 0.5);
   const [sensation, setSensation] = usePersistedState("ossm:sensation", 0.0);
-  const [selectedPattern, setSelectedPattern] = usePersistedState("ossm:pattern", 0);
+  const [selectedPattern, setSelectedPattern] = usePersistedState(
+    "ossm:pattern",
+    0,
+  );
   const [playbackState, setPlaybackState] = useState<PlaybackState>("stopped");
   const [appearance, toggleAppearance] = useAppearance();
   const isMobile = useIsMobile();
@@ -131,6 +146,7 @@ export default function App() {
             flex: isMobile ? undefined : 1,
             height: isMobile ? "30vh" : "100vh",
             minHeight: 0,
+            position: "relative",
           }}
         >
           <Suspense
@@ -143,6 +159,25 @@ export default function App() {
           >
             <Scene ref={sceneRef} simulator={simulator} />
           </Suspense>
+          <Button
+            asChild
+            variant="outline"
+            size="2"
+            style={{
+              position: "absolute",
+              top: 8,
+              right: 8,
+              alignContent: "center",
+            }}
+          >
+            <a
+              href="https://github.com/nakatanakamoto/ossm"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <GitHubLogoIcon /> nakata/ossm
+            </a>
+          </Button>
         </Box>
 
         <Box
