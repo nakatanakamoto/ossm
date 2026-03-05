@@ -1,6 +1,6 @@
 use rsruckig::prelude::*;
 
-use crate::command::{Command, CommandChannel, HomingSignal, MoveCompleteSignal};
+use crate::command::{Command, OssmChannels};
 use crate::{MechanicalConfig, MotionLimits, Motor};
 
 // Floor applied to velocity requests to prevent degenerate Ruckig inputs.
@@ -16,9 +16,7 @@ enum MotionState {
 
 pub struct MotionController<'a, M: Motor> {
     motor: M,
-    commands: &'a CommandChannel,
-    homing_done: &'a HomingSignal,
-    move_complete: &'a MoveCompleteSignal,
+    channels: &'a OssmChannels,
     state: MotionState,
     steps_per_mm: f64,
     min_position_mm: f64,
@@ -39,9 +37,7 @@ impl<'a, M: Motor> MotionController<'a, M> {
         config: &MechanicalConfig,
         limits: MotionLimits,
         update_interval_secs: f64,
-        commands: &'a CommandChannel,
-        homing_done: &'a HomingSignal,
-        move_complete: &'a MoveCompleteSignal,
+        channels: &'a OssmChannels,
     ) -> Self {
         let steps_per_mm = config.steps_per_mm(M::STEPS_PER_REV) as f64;
 
@@ -56,9 +52,7 @@ impl<'a, M: Motor> MotionController<'a, M> {
 
         Self {
             motor,
-            commands,
-            homing_done,
-            move_complete,
+            channels,
             state: MotionState::Disabled,
             steps_per_mm,
             min_position_mm: config.min_position_mm,
@@ -78,7 +72,7 @@ impl<'a, M: Motor> MotionController<'a, M> {
     pub async fn update(&mut self) {
         self.tick().await;
 
-        if let Ok(cmd) = self.commands.try_receive() {
+        if let Ok(cmd) = self.channels.commands.try_receive() {
             self.process_command(cmd).await;
         }
     }
@@ -164,7 +158,7 @@ impl<'a, M: Motor> MotionController<'a, M> {
 
                     if result == RuckigResult::Finished {
                         self.state = MotionState::Ready;
-                        self.move_complete.signal(());
+                        self.channels.move_complete.signal(());
                     }
                 }
                 _ => {}
@@ -184,7 +178,7 @@ impl<'a, M: Motor> MotionController<'a, M> {
         self.input.current_velocity[0] = 0.0;
         self.input.current_acceleration[0] = 0.0;
 
-        self.homing_done.signal(());
+        self.channels.homing_done.signal(());
         self.state = MotionState::Ready;
     }
 

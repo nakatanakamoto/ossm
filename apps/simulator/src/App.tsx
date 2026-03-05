@@ -1,8 +1,20 @@
-import { Suspense, useEffect, useRef, useState, useCallback } from "react";
+import { Suspense, useEffect, useRef, useState, useCallback, useMemo } from "react";
 import init, { Simulator } from "sim-wasm";
 import wasmUrl from "sim-wasm/sim_wasm_bg.wasm?url";
-import { Theme, Box, Flex, Heading, Text, Slider, Spinner } from "@radix-ui/themes";
+import {
+  Theme,
+  Box,
+  Flex,
+  Heading,
+  Text,
+  Slider,
+  Spinner,
+  Select,
+  Button,
+} from "@radix-ui/themes";
 import Scene from "./Scene";
+
+type PlaybackState = "stopped" | "playing" | "paused";
 
 export default function App() {
   const simRef = useRef<Simulator | null>(null);
@@ -10,7 +22,9 @@ export default function App() {
   const [depth, setDepth] = useState(1.0);
   const [stroke, setStroke] = useState(1.0);
   const [velocity, setVelocity] = useState(0.5);
-  const [sensation, setSensation] = useState(0);
+  const [sensation, setSensation] = useState(0.0);
+  const [selectedPattern, setSelectedPattern] = useState(0);
+  const [playbackState, setPlaybackState] = useState<PlaybackState>("stopped");
 
   useEffect(() => {
     let cancelled = false;
@@ -23,6 +37,19 @@ export default function App() {
       cancelled = true;
     };
   }, []);
+
+  const patterns = useMemo<
+    { index: number; name: string; description: string }[]
+  >(() => {
+    const sim = simRef.current;
+    if (!sim) return [];
+    const count = sim.pattern_count();
+    return Array.from({ length: count }, (_, i) => ({
+      index: i,
+      name: sim.pattern_name(i),
+      description: sim.pattern_description(i),
+    }));
+  }, [ready]);
 
   const updateDepth = useCallback((v: number) => {
     setDepth(v);
@@ -42,6 +69,33 @@ export default function App() {
   const updateSensation = useCallback((v: number) => {
     setSensation(v);
     simRef.current?.set_sensation(v);
+  }, []);
+
+  const handlePlay = useCallback(() => {
+    simRef.current?.play(selectedPattern);
+    setPlaybackState("playing");
+  }, [selectedPattern]);
+
+  const handlePause = useCallback(() => {
+    simRef.current?.pause();
+    setPlaybackState("paused");
+  }, []);
+
+  const handleResume = useCallback(() => {
+    simRef.current?.resume();
+    setPlaybackState("playing");
+  }, []);
+
+  const handleStop = useCallback(() => {
+    simRef.current?.stop();
+    setPlaybackState("stopped");
+  }, []);
+
+  const handlePatternChange = useCallback((value: string) => {
+    const index = Number(value);
+    setSelectedPattern(index);
+    simRef.current?.play(index);
+    setPlaybackState("playing");
   }, []);
 
   if (!ready) {
@@ -77,6 +131,54 @@ export default function App() {
           </Heading>
 
           <Flex direction="column" gap="4">
+            <Box>
+              <Text size="2" weight="medium" mb="1" as="label">
+                Pattern
+              </Text>
+              <Select.Root
+                value={String(selectedPattern)}
+                onValueChange={handlePatternChange}
+              >
+                <Select.Trigger style={{ width: "100%" }} />
+                <Select.Content>
+                  {patterns.map((p) => (
+                    <Select.Item key={p.index} value={String(p.index)}>
+                      {p.name}
+                    </Select.Item>
+                  ))}
+                </Select.Content>
+              </Select.Root>
+              {patterns[selectedPattern] && (
+                <Text size="1" color="gray" mt="1">
+                  {patterns[selectedPattern].description}
+                </Text>
+              )}
+            </Box>
+
+            <Flex gap="2">
+              {playbackState !== "playing" ? (
+                <Button
+                  onClick={
+                    playbackState === "paused" ? handleResume : handlePlay
+                  }
+                  variant="solid"
+                >
+                  {playbackState === "paused" ? "Resume" : "Play"}
+                </Button>
+              ) : (
+                <Button onClick={handlePause} variant="soft">
+                  Pause
+                </Button>
+              )}
+              <Button
+                onClick={handleStop}
+                variant="outline"
+                disabled={playbackState === "stopped"}
+              >
+                Stop
+              </Button>
+            </Flex>
+
             <LabeledSlider
               label="Depth"
               value={depth}
@@ -104,9 +206,9 @@ export default function App() {
             <LabeledSlider
               label="Sensation"
               value={sensation}
-              min={-100}
-              max={100}
-              step={1}
+              min={-1}
+              max={1}
+              step={0.01}
               onChange={updateSensation}
             />
           </Flex>

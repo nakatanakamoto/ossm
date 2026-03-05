@@ -6,6 +6,30 @@ pub type CommandChannel = Channel<CriticalSectionRawMutex, Command, 8>;
 pub type HomingSignal = Signal<CriticalSectionRawMutex, ()>;
 pub type MoveCompleteSignal = Signal<CriticalSectionRawMutex, ()>;
 
+/// Bundles the core channels shared between the [`Ossm`](crate::Ossm) handle
+/// and the [`MotionController`](crate::MotionController).
+///
+/// Declare a single `static` in your firmware instead of three separate ones:
+///
+/// ```ignore
+/// static CHANNELS: OssmChannels = OssmChannels::new();
+/// ```
+pub struct OssmChannels {
+    pub commands: CommandChannel,
+    pub homing_done: HomingSignal,
+    pub move_complete: MoveCompleteSignal,
+}
+
+impl OssmChannels {
+    pub const fn new() -> Self {
+        Self {
+            commands: CommandChannel::new(),
+            homing_done: HomingSignal::new(),
+            move_complete: MoveCompleteSignal::new(),
+        }
+    }
+}
+
 /// A single motion command expressed as fractions of the machine range.
 ///
 /// Unlike the separate `MoveTo`/`SetSpeed` commands, this sets both atomically.

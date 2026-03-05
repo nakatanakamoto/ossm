@@ -1,5 +1,5 @@
 use embedded_hal_async::delay::DelayNs;
-use ossm::{CommandChannel, MotionCommand, MoveCompleteSignal, Command};
+use ossm::{Command, MotionCommand, OssmChannels};
 
 use crate::input::{PatternInput, SharedPatternInput};
 use crate::util::scale;
@@ -25,22 +25,19 @@ pub trait Pattern {
 /// a generic `DelayNs`, and access to live input (depth, stroke, velocity,
 /// sensation).
 pub struct PatternCtx<D: DelayNs> {
-    commands: &'static CommandChannel,
-    move_complete: &'static MoveCompleteSignal,
+    channels: &'static OssmChannels,
     input: &'static SharedPatternInput,
     delay: D,
 }
 
 impl<D: DelayNs> PatternCtx<D> {
     pub fn new(
-        commands: &'static CommandChannel,
-        move_complete: &'static MoveCompleteSignal,
+        channels: &'static OssmChannels,
         input: &'static SharedPatternInput,
         delay: D,
     ) -> Self {
         Self {
-            commands,
-            move_complete,
+            channels,
             input,
             delay,
         }
@@ -76,9 +73,9 @@ impl<D: DelayNs> PatternCtx<D> {
     }
 
     async fn send_command(&self, cmd: MotionCommand) {
-        self.move_complete.reset();
-        let _ = self.commands.try_send(Command::Motion(cmd));
-        self.move_complete.wait().await;
+        self.channels.move_complete.reset();
+        let _ = self.channels.commands.try_send(Command::Motion(cmd));
+        self.channels.move_complete.wait().await;
     }
 
     /// Delay for the given number of milliseconds.
