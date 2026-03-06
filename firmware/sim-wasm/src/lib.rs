@@ -1,4 +1,4 @@
-use core::cell::{Cell, RefCell};
+use core::cell::Cell;
 use core::sync::atomic::{AtomicI32, Ordering};
 
 use embassy_time::{Delay, Duration, Ticker};
@@ -27,7 +27,7 @@ const CONFIG: MechanicalConfig = MechanicalConfig {
 
 #[wasm_bindgen]
 pub struct Simulator {
-    engine: RefCell<PatternEngine<'static>>,
+    engine: PatternEngine,
     steps_per_mm: f64,
     min_position_mm: f64,
     max_position_mm: f64,
@@ -71,7 +71,7 @@ impl Simulator {
         let steps_per_mm = CONFIG.steps_per_mm(SimMotor::STEPS_PER_REV) as f64;
 
         Self {
-            engine: RefCell::new(engine),
+            engine,
             steps_per_mm,
             min_position_mm: CONFIG.min_position_mm,
             max_position_mm: CONFIG.max_position_mm,
@@ -80,7 +80,7 @@ impl Simulator {
 
     /// Engine state: 0 = idle, 1 = homing, 2 = playing, 3 = paused.
     pub fn get_engine_state(&self) -> u8 {
-        self.engine.borrow().state()
+        self.engine.state().as_u8()
     }
 
     /// Current position as a fraction of the machine range (0.0–1.0).
@@ -128,19 +128,19 @@ impl Simulator {
     }
 
     pub fn play(&self, index: usize) {
-        self.engine.borrow_mut().play(index);
+        self.engine.play(index);
     }
 
     pub fn pause(&self) {
-        self.engine.borrow_mut().pause();
+        self.engine.pause();
     }
 
     pub fn resume(&self) {
-        self.engine.borrow_mut().resume();
+        self.engine.resume();
     }
 
     pub fn stop(&self) {
-        self.engine.borrow_mut().stop();
+        self.engine.stop();
     }
 
     pub fn pattern_count(&self) -> usize {

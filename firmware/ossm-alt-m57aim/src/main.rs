@@ -155,7 +155,7 @@ async fn main(spawner: Spawner) {
 
     info!("ESP-NOW remote tasks started, waiting for connection...");
 
-    let (mut engine, mut pattern_runner) = PatternEngine::new(AnyPattern::all_builtin(), &ENGINE_CHANNELS, ossm);
+    let (engine, mut pattern_runner) = PatternEngine::new(AnyPattern::all_builtin(), &ENGINE_CHANNELS, ossm);
 
     join(pattern_runner.run(&CHANNELS, &PATTERN_INPUT, Delay), async {
         let mut current_pattern: usize = 0;
