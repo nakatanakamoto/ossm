@@ -1,4 +1,4 @@
-use core::cell::Cell;
+use core::cell::{Cell, RefCell};
 use core::sync::atomic::{AtomicI32, Ordering};
 
 use embassy_time::{Delay, Duration, Ticker};
@@ -27,6 +27,7 @@ const CONFIG: MechanicalConfig = MechanicalConfig {
 
 #[wasm_bindgen]
 pub struct Simulator {
+    engine: RefCell<PatternEngine<'static>>,
     steps_per_mm: f64,
     min_position_mm: f64,
     max_position_mm: f64,
@@ -42,7 +43,7 @@ impl Simulator {
         let update_interval_secs = update_interval_ms / 1000.0;
         let motor = SimMotor::new(&MOTOR_POSITION);
 
-        let (_ossm, mut controller) = Ossm::new(
+        let (ossm, mut controller) = Ossm::new(
             motor,
             &CONFIG,
             MotionLimits::default(),
@@ -60,15 +61,17 @@ impl Simulator {
             }
         });
 
+        let (engine, mut pattern_runner) =
+            PatternEngine::new(AnyPattern::all_builtin(), &ENGINE_CHANNELS, ossm);
+
         wasm_bindgen_futures::spawn_local(async move {
-            let (_engine, mut pattern_runner) =
-                PatternEngine::new(AnyPattern::all_builtin(), &ENGINE_CHANNELS);
             pattern_runner.run(&CHANNELS, &PATTERN_INPUT, Delay).await;
         });
 
         let steps_per_mm = CONFIG.steps_per_mm(SimMotor::STEPS_PER_REV) as f64;
 
         Self {
+            engine: RefCell::new(engine),
             steps_per_mm,
             min_position_mm: CONFIG.min_position_mm,
             max_position_mm: CONFIG.max_position_mm,
@@ -77,9 +80,7 @@ impl Simulator {
 
     /// Engine state: 0 = idle, 1 = homing, 2 = playing, 3 = paused.
     pub fn get_engine_state(&self) -> u8 {
-        // Read directly from the shared channels — the handle exposes this
-        // but we can't store it across wasm_bindgen boundaries.
-        ENGINE_CHANNELS.state()
+        self.engine.borrow().state()
     }
 
     /// Current position as a fraction of the machine range (0.0–1.0).
@@ -127,19 +128,19 @@ impl Simulator {
     }
 
     pub fn play(&self, index: usize) {
-        ENGINE_CHANNELS.play(index);
+        self.engine.borrow_mut().play(index);
     }
 
     pub fn pause(&self) {
-        ENGINE_CHANNELS.pause();
+        self.engine.borrow_mut().pause();
     }
 
     pub fn resume(&self) {
-        ENGINE_CHANNELS.resume();
+        self.engine.borrow_mut().resume();
     }
 
     pub fn stop(&self) {
-        ENGINE_CHANNELS.stop();
+        self.engine.borrow_mut().stop();
     }
 
     pub fn pattern_count(&self) -> usize {

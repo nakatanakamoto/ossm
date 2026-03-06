@@ -17,19 +17,20 @@ pub use mechanical::MechanicalConfig;
 pub use motion::MotionController;
 pub use motor::{Motor, MotorTelemetry};
 
-pub struct Ossm<'a> {
-    channels: &'a OssmChannels,
+#[derive(Clone, Copy)]
+pub struct Ossm {
+    channels: &'static OssmChannels,
     update_interval_secs: f64,
 }
 
-impl<'a> Ossm<'a> {
+impl Ossm {
     pub fn new<B: Board>(
         board: B,
         config: &MechanicalConfig,
         limits: MotionLimits,
         update_interval_secs: f64,
-        channels: &'a OssmChannels,
-    ) -> (Self, MotionController<'a, B>) {
+        channels: &'static OssmChannels,
+    ) -> (Self, MotionController<'static, B>) {
         let controller =
             MotionController::new(board, config, limits, update_interval_secs, channels);
         let handle = Self {

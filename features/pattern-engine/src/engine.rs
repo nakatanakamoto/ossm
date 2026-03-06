@@ -4,7 +4,7 @@ use embassy_futures::select::{self, Either};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
 use embedded_hal_async::delay::DelayNs;
-use ossm::{Command, OssmChannels};
+use ossm::{Command, Ossm, OssmChannels};
 
 use crate::any_pattern::AnyPattern;
 use crate::input::SharedPatternInput;
@@ -13,8 +13,6 @@ use crate::pattern::{Pattern, PatternCtx};
 #[derive(Debug, Clone, Copy)]
 enum EngineCommand {
     Play(usize),
-    Pause,
-    Resume,
     Stop,
     Home,
 }
@@ -52,14 +50,6 @@ impl PatternEngineChannels {
         let _ = self.commands.try_send(EngineCommand::Play(index));
     }
 
-    pub fn pause(&self) {
-        let _ = self.commands.try_send(EngineCommand::Pause);
-    }
-
-    pub fn resume(&self) {
-        let _ = self.commands.try_send(EngineCommand::Resume);
-    }
-
     pub fn stop(&self) {
         let _ = self.commands.try_send(EngineCommand::Stop);
     }
@@ -82,6 +72,9 @@ impl PatternEngineChannels {
 /// async task.
 pub struct PatternEngine<'a> {
     channels: &'a PatternEngineChannels,
+    ossm: Ossm,
+    current_pattern: Option<usize>,
+    paused: bool,
 }
 
 impl<'a> PatternEngine<'a> {
@@ -93,8 +86,14 @@ impl<'a> PatternEngine<'a> {
     pub fn new<const N: usize>(
         patterns: [AnyPattern; N],
         channels: &'a PatternEngineChannels,
+        ossm: Ossm,
     ) -> (Self, PatternEngineRunner<'a, N>) {
-        let handle = Self { channels };
+        let handle = Self {
+            channels,
+            ossm,
+            current_pattern: None,
+            paused: false,
+        };
         let runner = PatternEngineRunner {
             channels,
             patterns,
@@ -103,19 +102,38 @@ impl<'a> PatternEngine<'a> {
         (handle, runner)
     }
 
-    pub fn play(&self, index: usize) {
+    pub fn play(&mut self, index: usize) {
+        if self.paused {
+            self.ossm.resume();
+            self.paused = false;
+            if self.current_pattern == Some(index) {
+                self.channels.state.store(engine_state::PLAYING, Ordering::Relaxed);
+                return;
+            }
+        }
+        self.current_pattern = Some(index);
         self.channels.play(index);
     }
 
-    pub fn pause(&self) {
-        self.channels.pause();
+    pub fn pause(&mut self) {
+        if self.current_pattern.is_some() && !self.paused {
+            self.ossm.pause();
+            self.paused = true;
+            self.channels.state.store(engine_state::PAUSED, Ordering::Relaxed);
+        }
     }
 
-    pub fn resume(&self) {
-        self.channels.resume();
+    pub fn resume(&mut self) {
+        if self.paused {
+            self.ossm.resume();
+            self.paused = false;
+            self.channels.state.store(engine_state::PLAYING, Ordering::Relaxed);
+        }
     }
 
-    pub fn stop(&self) {
+    pub fn stop(&mut self) {
+        self.paused = false;
+        self.current_pattern = None;
         self.channels.stop();
     }
 
@@ -135,7 +153,6 @@ enum EngineState {
     Homing(Option<usize>),
     Ready,
     Playing(usize),
-    Paused(usize),
 }
 
 impl EngineState {
@@ -145,7 +162,6 @@ impl EngineState {
             Self::Homing(_) => engine_state::HOMING,
             Self::Ready => engine_state::READY,
             Self::Playing(_) => engine_state::PLAYING,
-            Self::Paused(_) => engine_state::PAUSED,
         }
     }
 }
@@ -172,7 +188,7 @@ impl<'a, const N: usize> PatternEngineRunner<'a, N> {
     ) -> ! {
         loop {
             match self.state {
-                EngineState::Idle | EngineState::Ready | EngineState::Paused(_) => {
+                EngineState::Idle | EngineState::Ready => {
                     let cmd = self.channels.commands.receive().await;
                     self.handle_command(cmd, ossm_channels);
                 }
@@ -231,25 +247,9 @@ impl<'a, const N: usize> PatternEngineRunner<'a, N> {
                 if idx < N {
                     let next = match self.state {
                         EngineState::Idle => EngineState::Homing(Some(idx)),
-                        EngineState::Paused(_) => {
-                            let _ = ossm_channels.commands.try_send(Command::Resume);
-                            EngineState::Playing(idx)
-                        }
                         _ => EngineState::Playing(idx),
                     };
                     self.set_state(next);
-                }
-            }
-            EngineCommand::Pause => {
-                if let EngineState::Playing(idx) = self.state {
-                    let _ = ossm_channels.commands.try_send(Command::Pause);
-                    self.set_state(EngineState::Paused(idx));
-                }
-            }
-            EngineCommand::Resume => {
-                if let EngineState::Paused(idx) = self.state {
-                    let _ = ossm_channels.commands.try_send(Command::Resume);
-                    self.set_state(EngineState::Playing(idx));
                 }
             }
             EngineCommand::Stop => {

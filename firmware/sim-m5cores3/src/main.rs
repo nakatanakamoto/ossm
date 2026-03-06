@@ -183,7 +183,7 @@ async fn main(spawner: Spawner) {
 
     let steps_per_mm = mech_config.steps_per_mm(SimMotor::STEPS_PER_REV) as f64;
 
-    let (_ossm, controller) = Ossm::new(
+    let (ossm, controller) = Ossm::new(
         motor,
         &mech_config,
         limits.clone(),
@@ -275,8 +275,8 @@ async fn main(spawner: Spawner) {
 
     info!("ESP-NOW remote tasks started, waiting for connection...");
 
-    let (patterns, mut pattern_runner) =
-        PatternEngine::new(AnyPattern::all_builtin(), &ENGINE_CHANNELS);
+    let (mut patterns, mut pattern_runner) =
+        PatternEngine::new(AnyPattern::all_builtin(), &ENGINE_CHANNELS, ossm);
 
     join(
         pattern_runner.run(&CHANNELS, &PATTERN_INPUT, Delay),

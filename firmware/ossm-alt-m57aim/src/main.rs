@@ -87,7 +87,7 @@ async fn main(spawner: Spawner) {
     let mech_config = board.mechanical_config().clone();
     let limits = MotionLimits::default();
 
-    let (_ossm, controller) = Ossm::new(
+    let (ossm, controller) = Ossm::new(
         board,
         &mech_config,
         limits.clone(),
@@ -155,7 +155,7 @@ async fn main(spawner: Spawner) {
 
     info!("ESP-NOW remote tasks started, waiting for connection...");
 
-    let (_engine, mut pattern_runner) = PatternEngine::new(AnyPattern::all_builtin(), &ENGINE_CHANNELS);
+    let (mut engine, mut pattern_runner) = PatternEngine::new(AnyPattern::all_builtin(), &ENGINE_CHANNELS, ossm);
 
     join(pattern_runner.run(&CHANNELS, &PATTERN_INPUT, Delay), async {
         let mut current_pattern: usize = 0;
@@ -164,27 +164,27 @@ async fn main(spawner: Spawner) {
             while !matches!(REMOTE_EVENTS.receive().await, RemoteEvent::Connected) {}
 
             info!("Remote connected, homing...");
-            ENGINE_CHANNELS.home();
+            engine.home();
 
             loop {
                 match REMOTE_EVENTS.receive().await {
                     RemoteEvent::Disconnected => {
-                        ENGINE_CHANNELS.stop();
+                        engine.stop();
                         info!("Remote disconnected");
                         break;
                     }
                     RemoteEvent::Play => {
                         info!("Playing pattern {}", current_pattern);
-                        ENGINE_CHANNELS.play(current_pattern);
+                        engine.play(current_pattern);
                     }
                     RemoteEvent::Pause => {
-                        ENGINE_CHANNELS.pause();
+                        engine.pause();
                         info!("Paused");
                     }
                     RemoteEvent::SwitchPattern(idx) => {
                         current_pattern = idx as usize;
                         info!("Switching to pattern {}", current_pattern);
-                        ENGINE_CHANNELS.play(current_pattern);
+                        engine.play(current_pattern);
                     }
                     RemoteEvent::Connected => {}
                 }
