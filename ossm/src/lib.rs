@@ -7,6 +7,7 @@ mod limits;
 mod mechanical;
 mod motion;
 mod motor;
+pub mod stepdir;
 
 pub use board::Board;
 pub use command::{Cancelled, MotionCommand, StateCommand, StateResponse};
@@ -14,7 +15,8 @@ use command::{MoveCommand, OssmChannels};
 pub use limits::MotionLimits;
 pub use mechanical::MechanicalConfig;
 pub use motion::MotionController;
-pub use motor::{Motor, SelfHomingMotor};
+pub use motor::{Motor, Rs485, SelfHoming, StepDir};
+pub use stepdir::{StepDirConfig, StepDirError, StepDirMotor, StepOutput};
 
 pub struct Ossm {
     channels: OssmChannels,

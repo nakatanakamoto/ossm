@@ -6,7 +6,7 @@ mod transport;
 pub use rs485::Rs485;
 pub use transport::Rs485ModbusTransport;
 
-use ossm::{Board, MechanicalConfig, SelfHomingMotor};
+use ossm::{Board, MechanicalConfig, Rs485 as Rs485Motor, SelfHoming};
 
 #[derive(Debug)]
 pub enum BoardError<E: core::fmt::Debug> {
@@ -19,24 +19,24 @@ impl<E: core::fmt::Debug> From<E> for BoardError<E> {
     }
 }
 
-/// OSSM Alt board, generic over any [`SelfHomingMotor`] implementation.
+/// OSSM Alt board, generic over any [`Rs485`](ossm::Rs485) + [`SelfHoming`] motor.
 ///
 /// This board is a **position follower**. The motion controller calls
 /// `set_position(mm)` every tick with the next point on the ruckig
 /// trajectory. The board converts mm to steps and sends the command
 /// to the motor.
-pub struct OssmAlt<M: SelfHomingMotor> {
+pub struct OssmAlt<M: Rs485Motor + SelfHoming> {
     motor: M,
     mechanical: &'static MechanicalConfig,
 }
 
-impl<M: SelfHomingMotor> OssmAlt<M> {
+impl<M: Rs485Motor + SelfHoming> OssmAlt<M> {
     pub fn new(motor: M, mechanical: &'static MechanicalConfig) -> Self {
         Self { motor, mechanical }
     }
 }
 
-impl<M: SelfHomingMotor> Board for OssmAlt<M> {
+impl<M: Rs485Motor + SelfHoming> Board for OssmAlt<M> {
     type Error = BoardError<M::Error>;
 
     async fn enable(&mut self) -> Result<(), Self::Error> {
