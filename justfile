@@ -33,7 +33,7 @@ dev-patterns: build-wasm
 # All
 build-all: build-ossm-stock build-ossm-alt build-wasm build-m5cores3
 
-# Configure rust-analyzer for a target: esp32, esp32s3, wasm
+# Focus rust-analyzer on a specific target (esp32, esp32s3, wasm)
 focus target:
     #!/usr/bin/env bash
     case "{{ target }}" in
@@ -50,7 +50,10 @@ focus target:
             ra_features='[]'
             ;;
         *)
-            echo "Unknown target '{{ target }}'. Use: esp32, esp32s3, wasm"
+            echo "Unknown target '{{ target }}'. Valid targets:"
+            echo "  esp32   — Xtensa ESP32"
+            echo "  esp32s3 — Xtensa ESP32-S3"
+            echo "  wasm    — WASM simulator"
             exit 1
             ;;
     esac
