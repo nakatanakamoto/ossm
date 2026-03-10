@@ -1460,18 +1460,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ossm-alt-board"
-version = "0.1.0"
-dependencies = [
- "embassy-time",
- "embedded-hal 1.0.0",
- "embedded-io 0.7.1",
- "esp-hal",
- "ossm",
-]
-
-[[package]]
-name = "ossm-alt-m57aim"
+name = "ossm-alt"
 version = "0.1.0"
 dependencies = [
  "critical-section",
@@ -1494,6 +1483,17 @@ dependencies = [
  "pattern-engine",
  "portable-atomic",
  "static_cell",
+]
+
+[[package]]
+name = "ossm-alt-board"
+version = "0.1.0"
+dependencies = [
+ "embassy-time",
+ "embedded-hal 1.0.0",
+ "embedded-io 0.7.1",
+ "esp-hal",
+ "ossm",
 ]
 
 [[package]]

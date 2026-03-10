@@ -46,5 +46,5 @@ jobs:
 
       - uses: extractions/setup-just@v2
 
-      - name: Build ossm-alt-m57aim
+      - name: Build ossm-alt
         run: just build-ossm-alt

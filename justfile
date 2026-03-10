@@ -6,10 +6,10 @@ esp_flags := "--target " + esp_target + " -Z build-std=alloc,core --release"
 
 # OSSM Alt
 build-ossm-alt:
-    cargo +esp build -p ossm-alt-m57aim {{esp_flags}}
+    cargo +esp build -p ossm-alt {{esp_flags}}
 
 flash-ossm-alt: build-ossm-alt
-    espflash flash --monitor target/{{esp_target}}/release/ossm-alt-m57aim
+    espflash flash --monitor target/{{esp_target}}/release/ossm-alt
 
 # M5CoreS3 Simulator
 build-m5cores3:

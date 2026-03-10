@@ -9,7 +9,7 @@ opt-level = "s"
 incremental = false
 lto = 'fat'
 
-[profile.release.package.ossm-alt-m57aim]
+[profile.release.package.ossm-alt]
 codegen-units = 1
 debug = 2
 debug-assertions = false
