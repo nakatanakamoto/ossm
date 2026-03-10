@@ -146,7 +146,11 @@ export default function App() {
               </Flex>
             }
           >
-            <Scene ref={sceneRef} simulator={simulator} zoom={isMobile ? 900 : 1500} />
+            <Scene
+              ref={sceneRef}
+              simulator={simulator}
+              zoom={isMobile ? 900 : 1500}
+            />
           </Suspense>
           <Button
             asChild
@@ -160,11 +164,11 @@ export default function App() {
             }}
           >
             <a
-              href="https://github.com/nakatanakamoto/ossm"
+              href="https://github.com/ossm-rs/ossm"
               target="_blank"
               rel="noopener noreferrer"
             >
-              <GitHubLogoIcon /> nakata/ossm
+              <GitHubLogoIcon /> ossm-rs/ossm
             </a>
           </Button>
         </Box>
@@ -252,7 +256,8 @@ export default function App() {
                           : "Play"
                     }
                   >
-                    {playbackState === "playing" || playbackState === "homing" ? (
+                    {playbackState === "playing" ||
+                    playbackState === "homing" ? (
                       <PauseIcon />
                     ) : (
                       <PlayIcon />
@@ -268,7 +273,8 @@ export default function App() {
                     <StopIcon />
                   </IconButton>
                   <Text size="2" color="gray" ml="1">
-                    {playbackState.charAt(0).toUpperCase() + playbackState.slice(1)}
+                    {playbackState.charAt(0).toUpperCase() +
+                      playbackState.slice(1)}
                   </Text>
                 </Flex>
 
