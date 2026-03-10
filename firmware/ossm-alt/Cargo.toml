@@ -1,5 +1,5 @@
 [package]
-name = "ossm-alt-m57aim"
+name = "ossm-alt"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.88"
@@ -9,7 +9,9 @@ ossm = { path = "../../ossm" }
 pattern-engine = { path = "../../features/pattern-engine" }
 m57aim-motor = { path = "../../drivers/m57aim" }
 ossm-alt-board = { path = "../../boards/ossm-alt" }
-ossm-m5-remote = { path = "../../features/ossm-m5-remote", features = ["esp32s3"] }
+ossm-m5-remote = { path = "../../features/ossm-m5-remote", features = [
+    "esp32s3",
+] }
 
 esp-hal = { version = "~1.0", features = ["log-04", "esp32s3", "unstable"] }
 

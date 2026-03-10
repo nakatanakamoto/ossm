@@ -34,17 +34,17 @@ jobs:
 
       - uses: extractions/setup-just@v2
 
-      - name: Build ossm-alt-m57aim
+      - name: Build ossm-alt
         run: just build-ossm-alt
 
       - name: Install espflash
         run: cargo install espflash@3.3.0
 
       - name: Create firmware binary
-        run: espflash save-image --chip esp32s3 target/xtensa-esp32s3-none-elf/release/ossm-alt-m57aim ossm-alt-m57aim.bin
+        run: espflash save-image --chip esp32s3 target/xtensa-esp32s3-none-elf/release/ossm-alt ossm-alt.bin
 
       - name: Create release
-        run: gh release create "$TAG" ossm-alt-m57aim.bin --title "$TAG" --notes "$NOTES"
+        run: gh release create "$TAG" ossm-alt.bin --title "$TAG" --notes "$NOTES"
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.tag.outputs.new_tag }}
