@@ -16,6 +16,7 @@ use embassy_time::{Duration, Ticker};
 use esp_hal::interrupt::software::SoftwareInterruptControl;
 use esp_hal::timer::timg::TimerGroup;
 use esp_hal::{Blocking, gpio::Output, interrupt::Priority, uart::Uart};
+use esp_radio::ble::controller::BleConnector;
 use esp_radio::esp_now::{EspNowManager, EspNowSender};
 use esp_rtos::embassy::InterruptExecutor;
 use log::info;
@@ -67,7 +68,7 @@ async fn main(spawner: Spawner) {
 
     let p = esp_hal::init(esp_hal::Config::default());
 
-    esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: 73744);
+    esp_alloc::heap_allocator!(size: 128 * 1024);
 
     let timg0 = TimerGroup::new(p.TIMG0);
     esp_rtos::start(timg0.timer0);
@@ -141,6 +142,11 @@ async fn main(spawner: Spawner) {
     spawner
         .spawn(ossm_m5_remote::heartbeat_check_task(&REMOTE_EVENTS))
         .unwrap();
+
+    let bluetooth = p.BT;
+    let connector = BleConnector::new(radio, bluetooth, Default::default()).expect("Could not create BleConnector");
+
+    ble_remote::start(&spawner, connector, &PATTERNS);
 
     info!("ESP-NOW remote tasks started, waiting for connection...");
 
