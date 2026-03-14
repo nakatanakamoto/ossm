@@ -123,20 +123,24 @@ impl<'a, B: Board> MotionController<'a, B> {
 
     async fn process_state_command(&mut self, cmd: StateCommand) -> Result<(), B::Error> {
         match (&self.state, cmd) {
-            (MotionState::Disabled, StateCommand::Enable) => {
-                match self.board.enable().await {
-                    Ok(()) => {
-                        self.state = MotionState::Enabled;
-                        self.respond(StateResponse::Completed);
-                    }
-                    Err(e) => {
-                        log::error!("Board enable failed: {:?}", e);
-                        self.respond(StateResponse::Fault);
-                        return Err(e);
-                    }
+            (MotionState::Disabled, StateCommand::Enable) => match self.board.enable().await {
+                Ok(()) => {
+                    self.state = MotionState::Enabled;
+                    self.respond(StateResponse::Completed);
                 }
+                Err(e) => {
+                    log::error!("Board enable failed: {:?}", e);
+                    self.respond(StateResponse::Fault);
+                    return Err(e);
+                }
+            },
+            // Idempotent: already in the target state, nothing to do.
+            // BLE remote RADR thrashes sometimes causing the catch-all
+            // to trigger.
+            (MotionState::Enabled, StateCommand::Enable)
+            | (MotionState::Disabled, StateCommand::Disable) => {
+                self.respond(StateResponse::Completed);
             }
-
             (MotionState::Enabled | MotionState::Ready, StateCommand::Disable) => {
                 self.disable().await;
                 self.respond(StateResponse::Completed);
@@ -243,15 +247,13 @@ impl<'a, B: Board> MotionController<'a, B> {
                     self.disable().await;
                     self.respond(StateResponse::Completed);
                 }
-                MotionState::Stopping(StopReason::Home) => {
-                    match self.home().await {
-                        Ok(()) => self.respond(StateResponse::Completed),
-                        Err(e) => {
-                            self.respond(StateResponse::Fault);
-                            return Err(e);
-                        }
+                MotionState::Stopping(StopReason::Home) => match self.home().await {
+                    Ok(()) => self.respond(StateResponse::Completed),
+                    Err(e) => {
+                        self.respond(StateResponse::Fault);
+                        return Err(e);
                     }
-                }
+                },
                 _ => {
                     self.target = None;
                     self.state = MotionState::Ready;
