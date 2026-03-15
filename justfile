@@ -48,9 +48,8 @@ focus crate:
         echo "Error: .cargo exists and is not a symlink, refusing to remove"
         exit 1
     fi
-    rm -f .cargo
-    ln -sn "firmware/{{ crate }}/.cargo" .cargo
-    ln -sn "firmware/{{ crate }}/rust-toolchain.toml" rust-toolchain.toml
+    ln -sfn "firmware/{{ crate }}/.cargo" .cargo
+    ln -sfn "firmware/{{ crate }}/rust-toolchain.toml" rust-toolchain.toml
     echo "rust-analyzer focused on {{ crate }}"
 
 
