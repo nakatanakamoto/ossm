@@ -23,6 +23,6 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           PR=${{ github.event.pull_request.number }}
-          for board in ossm-alt waveshare; do
+          for board in ossm-alt waveshare seeed-xiao; do
             npx wrangler@4 r2 object delete --remote "ossm-firmware/pr-${PR}/${board}.bin" 2>/dev/null || true
           done
