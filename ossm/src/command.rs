@@ -48,6 +48,8 @@ pub enum StateCommand {
 pub enum StateResponse {
     Completed,
     InvalidTransition,
+    /// A board-level fault occurred while processing the command.
+    Fault,
 }
 
 /// Returned when an in-flight move is cancelled by a state command (e.g. disable, home).

@@ -98,31 +98,43 @@ impl<'a, B: Board> MotionController<'a, B> {
 
     /// Advance the motion control loop by one step.
     ///
-    /// Ticks the board, then the ruckig trajectory, then processes commands.
-    /// State commands are processed before move commands.
-    pub async fn update(&mut self) {
-        // 1. Let the board do periodic housekeeping (fault polling etc.)
-        let _ = self.board.tick().await;
+    /// Returns `Err` if the board reports a critical fault. The caller should
+    /// treat this as an unrecoverable error for this control cycle — the
+    /// controller will have already transitioned to `Disabled`.
+    pub async fn update(&mut self) -> Result<(), B::Error> {
+        if let Err(e) = self.board.tick().await {
+            log::error!("Board tick fault: {:?}", e);
+            self.enter_fault();
+            return Err(e);
+        }
 
-        // 2. Advance the trajectory and send position to the board.
-        self.tick().await;
+        self.tick().await?;
 
-        // 3. Process commands: state before move.
         if let Ok(cmd) = self.channels.state_cmd.try_receive() {
-            self.process_state_command(cmd).await;
+            self.process_state_command(cmd).await?;
         }
 
         if let Ok(cmd) = self.channels.move_cmd.try_receive() {
             self.process_move_command(cmd).await;
         }
+
+        Ok(())
     }
 
-    async fn process_state_command(&mut self, cmd: StateCommand) {
+    async fn process_state_command(&mut self, cmd: StateCommand) -> Result<(), B::Error> {
         match (&self.state, cmd) {
             (MotionState::Disabled, StateCommand::Enable) => {
-                let _ = self.board.enable().await;
-                self.state = MotionState::Enabled;
-                self.respond(StateResponse::Completed);
+                match self.board.enable().await {
+                    Ok(()) => {
+                        self.state = MotionState::Enabled;
+                        self.respond(StateResponse::Completed);
+                    }
+                    Err(e) => {
+                        log::error!("Board enable failed: {:?}", e);
+                        self.respond(StateResponse::Fault);
+                        return Err(e);
+                    }
+                }
             }
 
             (MotionState::Enabled | MotionState::Ready, StateCommand::Disable) => {
@@ -143,8 +155,13 @@ impl<'a, B: Board> MotionController<'a, B> {
             }
 
             (MotionState::Enabled | MotionState::Ready, StateCommand::Home) => {
-                self.home().await;
-                self.respond(StateResponse::Completed);
+                match self.home().await {
+                    Ok(()) => self.respond(StateResponse::Completed),
+                    Err(e) => {
+                        self.respond(StateResponse::Fault);
+                        return Err(e);
+                    }
+                }
             }
             (MotionState::Moving, StateCommand::Home) => {
                 self.channels.move_resp.signal(Err(Cancelled));
@@ -152,8 +169,13 @@ impl<'a, B: Board> MotionController<'a, B> {
             }
             (MotionState::Paused, StateCommand::Home) => {
                 self.channels.move_resp.signal(Err(Cancelled));
-                self.home().await;
-                self.respond(StateResponse::Completed);
+                match self.home().await {
+                    Ok(()) => self.respond(StateResponse::Completed),
+                    Err(e) => {
+                        self.respond(StateResponse::Fault);
+                        return Err(e);
+                    }
+                }
             }
 
             (MotionState::Moving, StateCommand::Pause) => {
@@ -170,6 +192,8 @@ impl<'a, B: Board> MotionController<'a, B> {
                 self.respond(StateResponse::InvalidTransition);
             }
         }
+
+        Ok(())
     }
 
     async fn process_move_command(&mut self, cmd: MotionCommand) {
@@ -190,22 +214,24 @@ impl<'a, B: Board> MotionController<'a, B> {
     }
 
     /// Sample the ruckig trajectory and send the position to the board.
-    async fn tick(&mut self) {
+    async fn tick(&mut self) -> Result<(), B::Error> {
         if !matches!(self.state, MotionState::Moving | MotionState::Stopping(_)) {
-            return;
+            return Ok(());
         }
 
         let Ok(result) = self.ruckig.update(&self.input, &mut self.output) else {
-            return;
+            return Ok(());
         };
 
         if !matches!(result, RuckigResult::Working | RuckigResult::Finished) {
-            return;
+            return Ok(());
         }
 
         let mm = self.output.new_position[0]
             .clamp(self.limits.min_position_mm, self.limits.max_position_mm);
-        let _ = self.board.set_position(mm).await;
+        if let Err(e) = self.board.set_position(mm).await {
+            log::error!("Board set_position failed: {:?}", e);
+        }
         self.output.pass_to_input(&mut self.input);
 
         if result == RuckigResult::Finished {
@@ -218,8 +244,13 @@ impl<'a, B: Board> MotionController<'a, B> {
                     self.respond(StateResponse::Completed);
                 }
                 MotionState::Stopping(StopReason::Home) => {
-                    self.home().await;
-                    self.respond(StateResponse::Completed);
+                    match self.home().await {
+                        Ok(()) => self.respond(StateResponse::Completed),
+                        Err(e) => {
+                            self.respond(StateResponse::Fault);
+                            return Err(e);
+                        }
+                    }
                 }
                 _ => {
                     self.target = None;
@@ -228,28 +259,42 @@ impl<'a, B: Board> MotionController<'a, B> {
                 }
             }
         }
+
+        Ok(())
     }
 
-    async fn home(&mut self) {
+    /// Run the homing sequence. Transitions to `Ready` on success, stays
+    /// `Disabled` on failure.
+    async fn home(&mut self) -> Result<(), B::Error> {
         self.state = MotionState::Disabled;
-        let _ = self.board.home().await;
 
-        // Reset ruckig state to the home position.
+        if let Err(e) = self.board.home().await {
+            log::error!("Board home failed: {:?}", e);
+            return Err(e);
+        }
+
         self.input.control_interface = ControlInterface::Position;
         self.input.current_position[0] = self.limits.min_position_mm;
         self.input.target_position[0] = self.limits.min_position_mm;
         self.input.current_velocity[0] = 0.0;
         self.input.current_acceleration[0] = 0.0;
 
-        // Send the board to the min position (home).
-        let _ = self.board.set_position(self.limits.min_position_mm).await;
+        if let Err(e) = self.board.set_position(self.limits.min_position_mm).await {
+            log::error!("Board set_position after home failed: {:?}", e);
+            return Err(e);
+        }
 
         self.target = None;
         self.state = MotionState::Ready;
+        Ok(())
     }
 
+    /// Best-effort disable. Logs errors but always transitions to `Disabled`,
+    /// because there is no useful recovery if the motor won't turn off.
     async fn disable(&mut self) {
-        let _ = self.board.disable().await;
+        if let Err(e) = self.board.disable().await {
+            log::error!("Board disable failed: {:?}", e);
+        }
         self.input.control_interface = ControlInterface::Position;
         self.target = None;
         self.state = MotionState::Disabled;
@@ -270,6 +315,27 @@ impl<'a, B: Board> MotionController<'a, B> {
         self.sync_ruckig();
         self.apply_torque().await;
         self.state = MotionState::Moving;
+    }
+
+    /// Cancel any in-flight motion and transition to `Disabled`.
+    ///
+    /// Called when `board.tick()` reports a critical fault. Signals appropriate
+    /// responses on the channels so callers aren't left waiting.
+    fn enter_fault(&mut self) {
+        match self.state {
+            MotionState::Moving | MotionState::Paused => {
+                self.channels.move_resp.signal(Err(Cancelled));
+            }
+            MotionState::Stopping(StopReason::Pause) => {
+                self.channels.move_resp.signal(Err(Cancelled));
+            }
+            MotionState::Stopping(StopReason::Disable | StopReason::Home) => {
+                self.respond(StateResponse::Fault);
+            }
+            _ => {}
+        }
+        self.target = None;
+        self.state = MotionState::Disabled;
     }
 
     fn respond(&self, resp: StateResponse) {
@@ -307,9 +373,10 @@ impl<'a, B: Board> MotionController<'a, B> {
         }
     }
 
-    /// Apply the current target's torque limit to the board.
     async fn apply_torque(&mut self) {
         let fraction = self.target.as_ref().and_then(|t| t.torque).unwrap_or(1.0);
-        let _ = self.board.set_torque(fraction).await;
+        if let Err(e) = self.board.set_torque(fraction).await {
+            log::error!("Board set_torque failed: {:?}", e);
+        }
     }
 }

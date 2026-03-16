@@ -26,7 +26,7 @@ use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
 use esp_radio::esp_now::{EspNowManager, EspNowSender};
 use log::info;
-use ossm::{MechanicalConfig, MotionController, MotionLimits, Motor, Ossm};
+use ossm::{MechanicalConfig, MotionController, MotionLimits, Ossm};
 use ossm_m5_remote::RemoteConfig;
 use pattern_engine::{AnyPattern, PatternEngine};
 use sim_m5cores3_board::{Display, FrameState, SimBoard, create_terminal, render_ui};
@@ -63,7 +63,9 @@ async fn motion_task(mut controller: MotionController<'static, SimBoard>) {
     let mut ticker = Ticker::every(Duration::from_micros(interval_us));
 
     loop {
-        controller.update().await;
+        if let Err(e) = controller.update().await {
+            log::error!("Motion controller fault: {:?}", e);
+        }
         ticker.next().await;
     }
 }
@@ -239,7 +241,14 @@ async fn main(spawner: Spawner) {
         max_travel_mm: limits.max_position_mm - limits.min_position_mm,
     };
 
-    ossm_m5_remote::start(&spawner, manager, sender, receiver, &PATTERNS, remote_config);
+    ossm_m5_remote::start(
+        &spawner,
+        manager,
+        sender,
+        receiver,
+        &PATTERNS,
+        remote_config,
+    );
 
     let mut pattern_runner = PATTERNS.runner(AnyPattern::all_builtin());
     pattern_runner.run(Delay).await;

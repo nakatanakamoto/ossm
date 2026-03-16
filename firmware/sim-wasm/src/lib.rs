@@ -50,7 +50,9 @@ impl Simulator {
         wasm_bindgen_futures::spawn_local(async move {
             let mut ticker = Ticker::every(Duration::from_micros(interval_us));
             loop {
-                controller.update().await;
+                if let Err(e) = controller.update().await {
+                    log::error!("Motion controller fault: {:?}", e);
+                }
                 ticker.next().await;
             }
         });
