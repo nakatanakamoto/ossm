@@ -1,4 +1,5 @@
-set windows-shell := ["powershell.exe", "-NoLogo", "-c"]
+set windows-shell := ["powershell.exe", "-NoLogo", "-c", "if (Test-Path \"$env:USERPROFILE\\export-esp.ps1\") { . \"$env:USERPROFILE\\export-esp.ps1\" };"]
+set shell := ["bash", "-c", ". $HOME/export-esp.sh 2>/dev/null; eval \"$0\""]
 set dotenv-load := true
 
 default:
@@ -43,6 +44,15 @@ dev-patterns: build-wasm
 # All
 [parallel]
 build-all: build-ossm-alt build-waveshare build-wasm build-m5cores3
+
+# Check that all required tools are installed
+[unix]
+doctor:
+    scripts/doctor.sh
+
+[windows]
+doctor:
+    powershell.exe -NoLogo -ExecutionPolicy Bypass -File scripts/doctor.ps1
 
 # Focus rust-analyzer on a firmware crate by symlinking its .cargo to the workspace root
 [unix]
