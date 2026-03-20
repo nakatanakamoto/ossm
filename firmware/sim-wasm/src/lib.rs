@@ -5,7 +5,7 @@ extern crate alloc;
 use alloc::string::String;
 
 use ossm::{MechanicalConfig, MotionLimits, Ossm};
-use pattern_engine::{AnyPattern, Pattern, PatternEngine};
+use pattern_engine::{AnyPattern, PatternEngine};
 use sim_board::SimBoard;
 use sim_motor::SimMotor;
 use wasm_bindgen::prelude::*;
@@ -142,22 +142,20 @@ impl Simulator {
     }
 
     pub fn pattern_count(&self) -> usize {
-        AnyPattern::all_builtin().len()
+        AnyPattern::BUILTIN_PATTERNS.len()
     }
 
     pub fn pattern_name(&self, index: usize) -> String {
-        let patterns = AnyPattern::all_builtin();
-        patterns
+        AnyPattern::BUILTIN_PATTERNS
             .get(index)
-            .map(|p| String::from(p.name()))
+            .map(|p| String::from(p.name))
             .unwrap_or_default()
     }
 
     pub fn pattern_description(&self, index: usize) -> String {
-        let patterns = AnyPattern::all_builtin();
-        patterns
+        AnyPattern::BUILTIN_PATTERNS
             .get(index)
-            .map(|p| String::from(p.description()))
+            .map(|p| String::from(p.description))
             .unwrap_or_default()
     }
 }

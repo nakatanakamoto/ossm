@@ -97,9 +97,9 @@ async fn display_task(mut display: Display, steps_per_mm: f64, min_mm: f64, max_
 
         let connected = ossm_m5_remote::is_connected();
         let pattern_idx = ossm_m5_remote::current_pattern() as usize;
-        let pattern_name = AnyPattern::BUILTIN_NAMES
+        let pattern_name = AnyPattern::BUILTIN_PATTERNS
             .get(pattern_idx)
-            .copied()
+            .map(|p| p.name)
             .unwrap_or("Unknown");
         let state = FrameState {
             position,
