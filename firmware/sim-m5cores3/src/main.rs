@@ -63,7 +63,9 @@ async fn motion_task(mut controller: MotionController<'static, SimBoard>) {
     let mut ticker = Ticker::every(Duration::from_micros(interval_us));
 
     loop {
-        controller.update().await;
+        if let Err(e) = controller.update().await {
+            log::error!("Motion controller fault: {:?}", e);
+        }
         ticker.next().await;
     }
 }
