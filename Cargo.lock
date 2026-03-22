@@ -1452,6 +1452,7 @@ version = "0.1.0"
 dependencies = [
  "crc",
  "embassy-sync 0.7.2",
+ "embassy-time",
  "embedded-hal 1.0.0",
  "embedded-hal-async",
  "embedded-io 0.7.1",
