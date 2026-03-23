@@ -11,6 +11,13 @@ pub use input::{PatternInput, SharedPatternInput};
 pub use pattern::{Pattern, PatternCtx};
 pub use util::scale;
 
+/// Public-facing metadata for a pattern.
+#[derive(Debug, Clone, Copy)]
+pub struct PatternMeta {
+    pub name: &'static str,
+    pub description: &'static str,
+}
+
 use embedded_hal_async::delay::DelayNs;
 
 use crate::patterns::{Deeper, HalfHalf, NonePattern, Simple, StopNGo, TeasingPounding, Torque};
@@ -21,7 +28,7 @@ use crate::patterns::{Deeper, HalfHalf, NonePattern, Simple, StopNGo, TeasingPou
 // 3. Add a `Variant(Type)` entry below.
 //
 // The macro generates the `AnyPattern` enum, `Pattern` trait delegation,
-// `From` impls, `BUILTIN_NAMES`, and `all_builtin()`.
+// `From` impls, `BUILTIN_PATTERNS`, and `all_builtin()`.
 // See `any_pattern_macro.rs` for the full definition.
 include!("any_pattern_macro.rs");
 

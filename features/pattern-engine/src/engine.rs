@@ -3,6 +3,7 @@ use core::sync::atomic::{AtomicU16, Ordering};
 use embassy_futures::select::{self, Either};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
+use embassy_sync::pubsub::{self, PubSubChannel};
 use embedded_hal_async::delay::DelayNs;
 use ossm::{Ossm, StateResponse};
 
@@ -68,6 +69,17 @@ impl EngineState {
     }
 }
 
+/// Broadcast channel for [`EngineState`].
+///
+/// Uses `PubSubChannel` so subscribers can be created and dropped
+/// dynamically as services start and stop.
+///
+/// - `CAP = 1`: only the latest transition matters; older messages are dropped.
+/// - `SUBS = 8`: up to 8 concurrent async subscribers.
+/// - `PUBS = 0`: publishing uses [`PubSubChannel::immediate_publisher()`]
+///   which does not consume a publisher slot.
+type StateChannel = PubSubChannel<CriticalSectionRawMutex, EngineState, 1, 8, 0>;
+
 struct PatternEngineChannels {
     commands: EngineCommandChannel,
     state: AtomicU16,
@@ -100,6 +112,7 @@ impl PatternEngineChannels {
 pub struct PatternEngine {
     channels: PatternEngineChannels,
     input: SharedPatternInput,
+    state_channel: StateChannel,
     ossm: &'static Ossm,
 }
 
@@ -108,12 +121,32 @@ impl PatternEngine {
         Self {
             channels: PatternEngineChannels::new(),
             input: SharedPatternInput::new_with(PatternInput::DEFAULT),
+            state_channel: StateChannel::new(),
             ossm,
         }
     }
 
     pub fn input(&self) -> &SharedPatternInput {
         &self.input
+    }
+
+    /// Create an async subscriber that receives [`EngineState`] on every
+    /// state transition.
+    ///
+    /// Returns `Err` if all subscriber slots are in use.
+    ///
+    /// ```ignore
+    /// let mut sub = engine.state_subscriber()?;
+    /// loop {
+    ///     let state = sub.next_message_pure().await;
+    ///     // react to state change …
+    /// }
+    /// ```
+    pub fn state_subscriber(
+        &self,
+    ) -> Result<pubsub::Subscriber<'_, CriticalSectionRawMutex, EngineState, 1, 8, 0>, pubsub::Error>
+    {
+        self.state_channel.subscriber()
     }
 
     pub fn runner<const N: usize>(
@@ -132,7 +165,6 @@ impl PatternEngine {
     }
 
     pub fn play(&self, index: usize) {
-        self.channels.store(EngineState::Playing(index));
         let _ = self.channels.commands.try_send(EngineCommand::Play(index));
     }
 
@@ -154,6 +186,12 @@ impl PatternEngine {
 
     pub fn state(&self) -> EngineState {
         self.channels.state()
+    }
+
+    fn publish_state(&self, state: EngineState) {
+        self.state_channel
+            .immediate_publisher()
+            .publish_immediate(state);
     }
 }
 
@@ -233,6 +271,9 @@ impl<const N: usize> PatternEngineRunner<N> {
 
                     // Split borrows: the pinned future holds `patterns[idx]`,
                     // so we access `engine` and `state` through separate refs.
+                    // This also means we cannot call `set_state()` here, so
+                    // transitions publish state directly via
+                    // `engine.publish_state()`.
                     let engine = self.engine;
                     let state = &mut self.state;
                     let pattern_fut = core::pin::pin!(self.patterns[idx].run(&mut ctx));
@@ -250,6 +291,7 @@ impl<const N: usize> PatternEngineRunner<N> {
                                 if matches!(*state, RunnerState::Playing(_)) {
                                     *state = RunnerState::Idle;
                                     engine.channels.store(EngineState::Idle);
+                                    engine.publish_state(EngineState::Idle);
                                 }
                                 break;
                             }
@@ -259,31 +301,38 @@ impl<const N: usize> PatternEngineRunner<N> {
                                         log::error!("Pause failed, stopping engine");
                                         *state = RunnerState::Idle;
                                         engine.channels.store(EngineState::Idle);
+                                        engine.publish_state(EngineState::Idle);
                                         break;
                                     }
                                     engine.channels.store(EngineState::Paused(idx));
+                                    engine.publish_state(EngineState::Paused(idx));
                                 }
                                 EngineCommand::Resume => {
                                     if ossm.resume().await != StateResponse::Completed {
                                         log::error!("Resume failed, stopping engine");
                                         *state = RunnerState::Idle;
                                         engine.channels.store(EngineState::Idle);
+                                        engine.publish_state(EngineState::Idle);
                                         break;
                                     }
                                     engine.channels.store(EngineState::Playing(idx));
+                                    engine.publish_state(EngineState::Playing(idx));
                                 }
                                 EngineCommand::Play(i) if i == idx => {
                                     if ossm.resume().await != StateResponse::Completed {
                                         log::error!("Resume failed, stopping engine");
                                         *state = RunnerState::Idle;
                                         engine.channels.store(EngineState::Idle);
+                                        engine.publish_state(EngineState::Idle);
                                         break;
                                     }
                                     engine.channels.store(EngineState::Playing(idx));
+                                    engine.publish_state(EngineState::Playing(idx));
                                 }
                                 EngineCommand::Play(new_idx) if new_idx < N => {
                                     *state = RunnerState::Playing(new_idx);
                                     engine.channels.store(EngineState::Playing(new_idx));
+                                    engine.publish_state(EngineState::Playing(new_idx));
                                     break;
                                 }
                                 EngineCommand::Stop => {
@@ -292,6 +341,7 @@ impl<const N: usize> PatternEngineRunner<N> {
                                     }
                                     *state = RunnerState::Idle;
                                     engine.channels.store(EngineState::Idle);
+                                    engine.publish_state(EngineState::Idle);
                                     break;
                                 }
                                 _ => {}
@@ -305,7 +355,9 @@ impl<const N: usize> PatternEngineRunner<N> {
 
     fn set_state(&mut self, state: RunnerState) {
         self.state = state;
-        self.engine.channels.store(state.as_engine_state());
+        let engine_state = state.as_engine_state();
+        self.engine.channels.store(engine_state);
+        self.engine.publish_state(engine_state);
     }
 
     async fn handle_command(&mut self, cmd: EngineCommand) {

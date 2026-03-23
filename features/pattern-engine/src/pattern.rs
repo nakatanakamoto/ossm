@@ -20,14 +20,6 @@ pub trait Pattern {
     const NAME: &'static str;
     const DESCRIPTION: &'static str;
 
-    fn name(&self) -> &'static str {
-        Self::NAME
-    }
-
-    fn description(&self) -> &'static str {
-        Self::DESCRIPTION
-    }
-
     async fn run(&mut self, ctx: &mut PatternCtx<impl DelayNs>) -> Result<(), Cancelled>;
 }
 
