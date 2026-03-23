@@ -160,6 +160,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
+name = "cobs"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fea6d1b751c55bd9c0dda7d4ff752074e98f4765ae969664648bd193bb326d15"
+dependencies = [
+ "thiserror",
+]
+
+[[package]]
 name = "compact_str"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1512,6 +1521,7 @@ name = "ossm"
 version = "0.1.0"
 dependencies = [
  "crc",
+ "embassy-futures",
  "embassy-sync 0.7.2",
  "embassy-time",
  "embedded-hal 1.0.0",
@@ -1521,6 +1531,7 @@ dependencies = [
  "log",
  "rmodbus",
  "rsruckig",
+ "telemetry",
 ]
 
 [[package]]
@@ -1548,6 +1559,7 @@ dependencies = [
  "portable-atomic",
  "rs485-board",
  "static_cell",
+ "telemetry",
 ]
 
 [[package]]
@@ -2135,6 +2147,18 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
+]
+
+[[package]]
+name = "telemetry"
+version = "0.1.0"
+dependencies = [
+ "cobs",
+ "crc",
+ "embassy-sync 0.7.2",
+ "embedded-io-async 0.7.0",
+ "log",
+ "ossm",
 ]
 
 [[package]]

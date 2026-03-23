@@ -41,6 +41,10 @@ build-wasm:
 dev-patterns: build-wasm
     pnpm dev --host
 
+# Run unit tests on the host (overrides any .cargo target symlink)
+test *ARGS:
+    cargo +stable test --target "$(rustc +stable -vV | awk '/^host:/ {print $2}')" {{ ARGS }}
+
 # All
 [parallel]
 build-all: build-ossm-alt build-waveshare build-wasm build-m5cores3
