@@ -145,8 +145,8 @@ impl<'a, D: DelayNs> MotionBuilder<'a, D, NoPosition> {
 }
 
 fn compute_command(input: &PatternInput, fraction: f64, speed_factor: f64, torque: Option<f64>) -> MotionCommand {
-    let shallow = (input.depth - input.stroke).max(0.0);
-    let stroke = input.depth - shallow;
+    let stroke = input.depth * input.stroke.clamp(0.0, 1.0);
+    let shallow = input.depth - stroke;
     let position = shallow + fraction * stroke;
     let speed = input.velocity * speed_factor.clamp(0.0, 1.0);
     MotionCommand {
