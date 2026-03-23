@@ -28,8 +28,8 @@ use log::info;
 use m57aim_motor::{Modbus, Motor57AIM, Motor57AIMConfig};
 use ossm::{MechanicalConfig, MotionController, MotionLimits, Ossm};
 
-use rs485_board::{Rs485Board, Rs485, Rs485ModbusTransport};
 use ossm_m5_remote::RemoteConfig;
+use rs485_board::{Rs485, Rs485Board, Rs485ModbusTransport};
 
 use pattern_engine::{AnyPattern, PatternEngine};
 use static_cell::StaticCell;
@@ -176,7 +176,14 @@ async fn main(spawner: Spawner) {
         max_travel_mm: limits.max_position_mm - limits.min_position_mm,
     };
 
-    ossm_m5_remote::start(&spawner, manager, sender, receiver, &PATTERNS, remote_config);
+    ossm_m5_remote::start(
+        &spawner,
+        manager,
+        sender,
+        receiver,
+        &PATTERNS,
+        remote_config,
+    );
 
     let connector = BleConnector::new(radio, p.BT, Default::default())
         .expect("Could not create BleConnector");

@@ -14,6 +14,31 @@ pub enum MotionPhase {
     Paused,
 }
 
+impl MotionPhase {
+    pub fn to_u8(self) -> u8 {
+        match self {
+            Self::Disabled => 0,
+            Self::Enabled => 1,
+            Self::Ready => 2,
+            Self::Moving => 3,
+            Self::Stopping => 4,
+            Self::Paused => 5,
+        }
+    }
+
+    pub fn from_u8(v: u8) -> Self {
+        match v {
+            0 => Self::Disabled,
+            1 => Self::Enabled,
+            2 => Self::Ready,
+            3 => Self::Moving,
+            4 => Self::Stopping,
+            5 => Self::Paused,
+            _ => Self::Disabled,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct MotionState {
     pub phase: MotionPhase,

@@ -10,6 +10,7 @@ mod mechanical;
 mod motion;
 mod motor;
 mod state;
+pub mod telemetry;
 pub mod transport;
 
 pub use board::Board;
@@ -20,6 +21,7 @@ pub use mechanical::MechanicalConfig;
 pub use motion::MotionController;
 pub use motor::{Motor, Rs485Motor, SelfHoming, StepDir};
 pub use state::{MotionPhase, MotionState};
+pub use telemetry::CoreTelemetry;
 pub use transport::{
     Modbus, ModbusTransport, Rs485, Rs485ModbusTransport, StepDirConfig, StepDirError,
     StepDirMotor, StepOutput, TransportError,
