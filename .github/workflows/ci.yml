@@ -33,6 +33,8 @@ jobs:
   build-esp:
     name: Build ${{ matrix.firmware }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       matrix:
         firmware: [ossm-alt, waveshare]
