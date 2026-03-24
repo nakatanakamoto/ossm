@@ -21,6 +21,7 @@ use esp_hal::{
     timer::timg::TimerGroup,
     uart::{Config, Uart},
 };
+use esp_radio::ble::controller::BleConnector;
 use esp_radio::esp_now::{EspNowManager, EspNowSender};
 use esp_rtos::embassy::InterruptExecutor;
 use log::info;
@@ -83,7 +84,7 @@ async fn main(spawner: Spawner) {
 
     let p = esp_hal::init(esp_hal::Config::default());
 
-    esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: 73744);
+    esp_alloc::heap_allocator!(size: 128 * 1024);
 
     let timg0 = TimerGroup::new(p.TIMG0);
     esp_rtos::start(timg0.timer0);
@@ -174,6 +175,10 @@ async fn main(spawner: Spawner) {
     };
 
     ossm_m5_remote::start(&spawner, manager, sender, receiver, &PATTERNS, remote_config);
+
+    let connector = BleConnector::new(radio, p.BT, Default::default())
+        .expect("Could not create BleConnector");
+    ble_remote::start(&spawner, connector, &PATTERNS);
 
     let mut pattern_runner = PATTERNS.runner(AnyPattern::all_builtin());
     pattern_runner.run(Delay).await;

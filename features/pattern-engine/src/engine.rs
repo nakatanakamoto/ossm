@@ -7,6 +7,8 @@ use embassy_sync::pubsub::{self, PubSubChannel};
 use embedded_hal_async::delay::DelayNs;
 use ossm::{Ossm, StateResponse};
 
+use log::info;
+
 use crate::AnyPattern;
 use crate::input::{PatternInput, SharedPatternInput};
 use crate::pattern::{Pattern, PatternCtx};
@@ -356,6 +358,7 @@ impl<const N: usize> PatternEngineRunner<N> {
     fn set_state(&mut self, state: RunnerState) {
         self.state = state;
         let engine_state = state.as_engine_state();
+        info!("Engine state: {:?}", engine_state);
         self.engine.channels.store(engine_state);
         self.engine.publish_state(engine_state);
     }
