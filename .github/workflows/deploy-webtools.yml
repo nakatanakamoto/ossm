@@ -1,12 +1,6 @@
 name: Deploy Web Tools
 
 on:
-  workflow_dispatch:
-    inputs:
-      production:
-        description: "Deploy to production"
-        type: boolean
-        default: false
   push:
     branches: [main]
   pull_request:
@@ -54,17 +48,13 @@ jobs:
         if: github.actor != 'dependabot[bot]'
         id: meta
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.production }}" = "true" ]; then
+          if [ "${{ github.event_name }}" = "push" ]; then
             echo "environment=Production" >> "$GITHUB_OUTPUT"
             echo "url=https://web-tools.nakata.dev" >> "$GITHUB_OUTPUT"
             echo "transient=false" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event_name }}" = "push" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "environment=Staging" >> "$GITHUB_OUTPUT"
-            echo "url=https://staging.web-tools.nakata.dev" >> "$GITHUB_OUTPUT"
-            echo "transient=false" >> "$GITHUB_OUTPUT"
           else
             echo "environment=Preview (PR #${{ github.event.pull_request.number }})" >> "$GITHUB_OUTPUT"
-            echo "url=https://pr-${{ github.event.pull_request.number }}-ossm-web-tools.nakata-464.workers.dev" >> "$GITHUB_OUTPUT"
+            echo "url=https://pr-${{ github.event.pull_request.number }}-web-tools.ossm-rs.workers.dev" >> "$GITHUB_OUTPUT"
             echo "transient=true" >> "$GITHUB_OUTPUT"
           fi
 
@@ -79,23 +69,13 @@ jobs:
           transient-environment: ${{ steps.meta.outputs.transient }}
 
       - name: Deploy to production
-        if: github.event_name == 'workflow_dispatch' && inputs.production == true
+        if: github.event_name == 'push'
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: "4"
           command: deploy
-          workingDirectory: apps/web-tools
-
-      - name: Deploy to staging
-        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.production == false)
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          wranglerVersion: "4"
-          command: deploy --env staging
           workingDirectory: apps/web-tools
 
       - name: Deploy PR preview
@@ -136,5 +116,5 @@ jobs:
         with:
           header: cloudflare-preview
           message: |
-            :rocket: [Preview deployment for this PR](https://pr-${{ github.event.pull_request.number }}-ossm-web-tools.nakata-464.workers.dev)
+            :rocket: [Preview deployment for this PR](https://pr-${{ github.event.pull_request.number }}-web-tools.ossm-rs.workers.dev)
             Deployed on ${{ steps.timestamp.outputs.time }}
