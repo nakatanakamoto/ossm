@@ -1,5 +1,0 @@
-{
-  "installCommand": "echo 'Install handled in build script'",
-  "buildCommand": "bash scripts/vercel-build.sh",
-  "outputDirectory": "dist"
-}

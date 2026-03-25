@@ -3,7 +3,7 @@
   "build": {
     "dockerfile": "Dockerfile"
   },
-  "postCreateCommand": "pnpm install --force --dir apps/simulator",
+  "postCreateCommand": "pnpm install --force --dir apps/web-tools",
   "customizations": {
     "vscode": {
       "extensions": [
