@@ -51,6 +51,7 @@ jobs:
         working-directory: apps/web-tools
 
       - name: Set deploy metadata
+        if: github.actor != 'dependabot[bot]'
         id: meta
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.production }}" = "true" ]; then
@@ -68,6 +69,7 @@ jobs:
           fi
 
       - name: Create GitHub deployment
+        if: github.actor != 'dependabot[bot]'
         id: deployment
         uses: chrnorm/deployment-action@v2
         with:
@@ -97,7 +99,7 @@ jobs:
           workingDirectory: apps/web-tools
 
       - name: Deploy PR preview
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -107,7 +109,7 @@ jobs:
           workingDirectory: apps/web-tools
 
       - name: Update deployment status (success)
-        if: success()
+        if: success() && github.actor != 'dependabot[bot]'
         uses: chrnorm/deployment-status@v2
         with:
           token: ${{ github.token }}
@@ -116,7 +118,7 @@ jobs:
           environment-url: ${{ steps.meta.outputs.url }}
 
       - name: Update deployment status (failure)
-        if: failure()
+        if: failure() && github.actor != 'dependabot[bot]'
         uses: chrnorm/deployment-status@v2
         with:
           token: ${{ github.token }}
@@ -124,12 +126,12 @@ jobs:
           deployment-id: ${{ steps.deployment.outputs.deployment_id }}
 
       - name: Get deploy timestamp
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
         id: timestamp
         run: echo "time=$(date -u +'%b %d, %Y at %H:%M UTC')" >> "$GITHUB_OUTPUT"
 
       - name: Comment preview URL on PR
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: cloudflare-preview
