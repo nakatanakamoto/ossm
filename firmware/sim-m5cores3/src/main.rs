@@ -7,8 +7,6 @@
 )]
 #![deny(clippy::large_stack_frames)]
 
-use core::sync::atomic::{AtomicI32, Ordering};
-
 use embassy_executor::Spawner;
 use embassy_futures::yield_now;
 use embassy_sync::blocking_mutex::raw::{CriticalSectionRawMutex, NoopRawMutex};
@@ -52,7 +50,6 @@ const UPDATE_INTERVAL_SECS: f64 = 1.0 / 30.0;
 
 static OSSM: Ossm = Ossm::new();
 static PATTERNS: PatternEngine = PatternEngine::new(&OSSM);
-static MOTOR_POSITION: AtomicI32 = AtomicI32::new(0);
 static EXECUTOR_CORE_1: StaticCell<InterruptExecutor<2>> = StaticCell::new();
 static APP_CORE_STACK: StaticCell<Stack<16384>> = StaticCell::new();
 static MOTION_READY: Signal<CriticalSectionRawMutex, bool> = Signal::new();
@@ -71,27 +68,13 @@ async fn motion_task(mut controller: MotionController<'static, SimBoard>) {
 }
 
 #[embassy_executor::task]
-async fn display_task(mut display: Display, steps_per_mm: f64, min_mm: f64, max_mm: f64) {
+async fn display_task(mut display: Display) {
     let mut terminal = create_terminal(&mut display);
-    let range = max_mm - min_mm;
     let mut last_frame = Instant::now();
     let mut fps: u32 = 0;
 
     loop {
-        let steps = MOTOR_POSITION.load(Ordering::Relaxed);
-        let mm = steps as f64 / steps_per_mm;
-        let position = if range > 0.0 {
-            let frac = (mm - min_mm) / range;
-            if frac < 0.0 {
-                0.0
-            } else if frac > 1.0 {
-                1.0
-            } else {
-                frac
-            }
-        } else {
-            0.0
-        };
+        let position = OSSM.motion_state().position as f64;
 
         let input = PATTERNS.input().try_get().unwrap_or_default();
 
@@ -171,13 +154,12 @@ async fn main(spawner: Spawner) {
         belt_pitch_mm: 2.0,
     };
 
-    let motor = SimMotor::new(&MOTOR_POSITION);
+    let motor = SimMotor::new();
     let limits = MotionLimits {
         max_position_mm: 250.0,
         ..MotionLimits::default()
     };
 
-    let steps_per_mm = MECHANICAL.steps_per_mm(SimMotor::STEPS_PER_REV) as f64;
     let board = SimBoard::new(motor, &MECHANICAL);
 
     let controller = OSSM.controller(board, limits.clone(), UPDATE_INTERVAL_SECS);
@@ -207,14 +189,7 @@ async fn main(spawner: Spawner) {
 
     MOTION_READY.wait().await;
 
-    spawner
-        .spawn(display_task(
-            display,
-            steps_per_mm,
-            limits.min_position_mm,
-            limits.max_position_mm,
-        ))
-        .unwrap();
+    spawner.spawn(display_task(display)).unwrap();
 
     let radio = &*mk_static!(
         esp_radio::Controller<'static>,

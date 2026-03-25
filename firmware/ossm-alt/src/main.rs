@@ -20,6 +20,7 @@ use esp_hal::{
     system::Stack,
     timer::timg::TimerGroup,
     uart::{Config, Uart},
+    usb_serial_jtag::UsbSerialJtag,
 };
 use esp_radio::ble::controller::BleConnector;
 use esp_radio::esp_now::{EspNowManager, EspNowSender};
@@ -28,8 +29,9 @@ use log::info;
 use m57aim_motor::{Modbus, Motor57AIM, Motor57AIMConfig};
 use ossm::{MechanicalConfig, MotionController, MotionLimits, Ossm};
 
-use rs485_board::{Rs485Board, Rs485, Rs485ModbusTransport};
 use ossm_m5_remote::RemoteConfig;
+use telemetry::transport::{TelemetryChannel, TelemetrySender};
+use rs485_board::{Rs485, Rs485Board, Rs485ModbusTransport};
 
 use pattern_engine::{AnyPattern, PatternEngine};
 use static_cell::StaticCell;
@@ -56,8 +58,11 @@ type ConcreteTransport =
 type ConcreteMotor = Motor57AIM<Modbus<ConcreteTransport>, Delay>;
 type ConcreteBoard = Rs485Board<ConcreteMotor>;
 
+const TELEMETRY_ENABLED: bool = true;
+
 static OSSM: Ossm = Ossm::new();
 static PATTERNS: PatternEngine = PatternEngine::new(&OSSM);
+static TELEMETRY_CHANNEL: TelemetryChannel = TelemetryChannel::new();
 
 static EXECUTOR_CORE_1: StaticCell<InterruptExecutor<2>> = StaticCell::new();
 static APP_CORE_STACK: StaticCell<Stack<16384>> = StaticCell::new();
@@ -76,11 +81,24 @@ async fn motion_task(mut controller: MotionController<'static, ConcreteBoard>) {
     }
 }
 
+#[embassy_executor::task]
+async fn telemetry_writer_task(writer: UsbSerialJtag<'static, esp_hal::Async>) {
+    telemetry::transport::tx_task(writer, &TELEMETRY_CHANNEL).await;
+}
+
+#[embassy_executor::task]
+async fn core_telemetry_task() {
+    let sender = TelemetrySender::new(&TELEMETRY_CHANNEL);
+    ossm::telemetry::telemetry_task(&OSSM, &sender).await;
+}
+
 #[esp_rtos::main]
 async fn main(spawner: Spawner) {
-    ossm::logging::init(log::LevelFilter::Info, |line| {
-        esp_println::println!("{}", line);
-    });
+    if !TELEMETRY_ENABLED {
+        ossm::logging::init(log::LevelFilter::Info, |line| {
+            esp_println::println!("{}", line);
+        });
+    }
 
     let p = esp_hal::init(esp_hal::Config::default());
 
@@ -174,11 +192,24 @@ async fn main(spawner: Spawner) {
         max_travel_mm: limits.max_position_mm - limits.min_position_mm,
     };
 
-    ossm_m5_remote::start(&spawner, manager, sender, receiver, &PATTERNS, remote_config);
+    ossm_m5_remote::start(
+        &spawner,
+        manager,
+        sender,
+        receiver,
+        &PATTERNS,
+        remote_config,
+    );
 
     let connector = BleConnector::new(radio, p.BT, Default::default())
         .expect("Could not create BleConnector");
     ble_remote::start(&spawner, connector, &PATTERNS);
+
+    if TELEMETRY_ENABLED {
+        let usb_serial = UsbSerialJtag::new(p.USB_DEVICE).into_async();
+        spawner.spawn(telemetry_writer_task(usb_serial)).unwrap();
+        spawner.spawn(core_telemetry_task()).unwrap();
+    }
 
     let mut pattern_runner = PATTERNS.runner(AnyPattern::all_builtin());
     pattern_runner.run(Delay).await;

@@ -1,5 +1,3 @@
-use core::sync::atomic::{AtomicI32, Ordering};
-
 use embassy_time::{Delay, Duration, Ticker};
 extern crate alloc;
 use alloc::string::String;
@@ -12,7 +10,6 @@ use wasm_bindgen::prelude::*;
 
 static OSSM: Ossm = Ossm::new();
 static PATTERNS: PatternEngine = PatternEngine::new(&OSSM);
-static MOTOR_POSITION: AtomicI32 = AtomicI32::new(0);
 
 static MECHANICAL: MechanicalConfig = MechanicalConfig {
     pulley_teeth: 20,
@@ -20,11 +17,7 @@ static MECHANICAL: MechanicalConfig = MechanicalConfig {
 };
 
 #[wasm_bindgen]
-pub struct Simulator {
-    steps_per_mm: f64,
-    min_position_mm: f64,
-    max_position_mm: f64,
-}
+pub struct Simulator {}
 
 #[wasm_bindgen]
 impl Simulator {
@@ -38,7 +31,7 @@ impl Simulator {
         });
 
         let update_interval_secs = update_interval_ms / 1000.0;
-        let motor = SimMotor::new(&MOTOR_POSITION);
+        let motor = SimMotor::new();
         let board = SimBoard::new(motor, &MECHANICAL);
 
         let limits = MotionLimits {
@@ -47,7 +40,7 @@ impl Simulator {
             ..MotionLimits::default()
         };
 
-        let mut controller = OSSM.controller(board, limits.clone(), update_interval_secs);
+        let mut controller = OSSM.controller(board, limits, update_interval_secs);
 
         let interval_us = (update_interval_secs * 1_000_000.0) as u64;
 
@@ -67,13 +60,7 @@ impl Simulator {
             pattern_runner.run(Delay).await;
         });
 
-        let steps_per_mm = MECHANICAL.steps_per_mm(SimMotor::STEPS_PER_REV) as f64;
-
-        Self {
-            steps_per_mm,
-            min_position_mm: limits.min_position_mm,
-            max_position_mm: limits.max_position_mm,
-        }
+        Self {}
     }
 
     /// Engine state: 0 = idle, 1 = homing, 2 = playing, 3 = paused.
@@ -83,10 +70,7 @@ impl Simulator {
 
     /// Current position as a fraction of the machine range (0.0-1.0).
     pub fn get_position(&self) -> f64 {
-        let steps = MOTOR_POSITION.load(Ordering::Relaxed);
-        let mm = steps as f64 / self.steps_per_mm;
-        let range = self.max_position_mm - self.min_position_mm;
-        (mm - self.min_position_mm) / range
+        OSSM.motion_state().position as f64
     }
 
     /// Set the maximum depth as a fraction of the machine range (0.0-1.0).
