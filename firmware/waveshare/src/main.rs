@@ -14,22 +14,20 @@ use embassy_sync::signal::Signal;
 use embassy_time::Delay;
 use embassy_time::{Duration, Ticker};
 use esp_hal::{
-    Blocking,
-    gpio::{Level, Output, OutputConfig},
     interrupt::{Priority, software::SoftwareInterruptControl},
     system::Stack,
     timer::timg::TimerGroup,
-    uart::{Config, Uart},
+    usb_serial_jtag::UsbSerialJtag,
 };
 use esp_radio::ble::controller::BleConnector;
 use esp_radio::esp_now::{EspNowManager, EspNowSender};
 use esp_rtos::embassy::InterruptExecutor;
 use log::info;
-use m57aim_motor::{Modbus, Motor57AIM, Motor57AIMConfig};
 use ossm::{MechanicalConfig, MotionController, MotionLimits, Ossm};
-
-use rs485_board::{Rs485Board, Rs485, Rs485ModbusTransport};
+use sim_board::SimBoard;
+use sim_motor::SimMotor;
 use ossm_m5_remote::RemoteConfig;
+use telemetry::transport::{TelemetryChannel, TelemetrySender};
 
 use pattern_engine::{AnyPattern, PatternEngine};
 use static_cell::StaticCell;
@@ -41,8 +39,6 @@ extern crate alloc;
 esp_bootloader_esp_idf::esp_app_desc!();
 
 const UPDATE_INTERVAL_SECS: f64 = 0.01;
-const MOTOR_BAUD_RATE: u32 = 115_200;
-const DEVICE_ADDR: u8 = 0x01;
 
 macro_rules! mk_static {
     ($t:ty, $val:expr) => {{
@@ -51,13 +47,13 @@ macro_rules! mk_static {
     }};
 }
 
-type ConcreteTransport =
-    Rs485ModbusTransport<Rs485<Uart<'static, Blocking>, Output<'static>>, Delay>;
-type ConcreteMotor = Motor57AIM<Modbus<ConcreteTransport>, Delay>;
-type ConcreteBoard = Rs485Board<ConcreteMotor>;
+type ConcreteBoard = SimBoard;
+
+const TELEMETRY_ENABLED: bool = true;
 
 static OSSM: Ossm = Ossm::new();
 static PATTERNS: PatternEngine = PatternEngine::new(&OSSM);
+static TELEMETRY_CHANNEL: TelemetryChannel = TelemetryChannel::new();
 
 static EXECUTOR_CORE_1: StaticCell<InterruptExecutor<2>> = StaticCell::new();
 static APP_CORE_STACK: StaticCell<Stack<16384>> = StaticCell::new();
@@ -76,11 +72,24 @@ async fn motion_task(mut controller: MotionController<'static, ConcreteBoard>) {
     }
 }
 
+#[embassy_executor::task]
+async fn telemetry_writer_task(writer: UsbSerialJtag<'static, esp_hal::Async>) {
+    telemetry::transport::tx_task(writer, &TELEMETRY_CHANNEL).await;
+}
+
+#[embassy_executor::task]
+async fn core_telemetry_task() {
+    let sender = TelemetrySender::new(&TELEMETRY_CHANNEL);
+    ossm::telemetry::telemetry_task(&OSSM, &sender).await;
+}
+
 #[esp_rtos::main]
 async fn main(spawner: Spawner) {
-    ossm::logging::init(log::LevelFilter::Info, |line| {
-        esp_println::println!("{}", line);
-    });
+    if !TELEMETRY_ENABLED {
+        ossm::logging::init(log::LevelFilter::Info, |line| {
+            esp_println::println!("{}", line);
+        });
+    }
 
     ossm::build_info!();
 
@@ -91,29 +100,14 @@ async fn main(spawner: Spawner) {
     let timg0 = TimerGroup::new(p.TIMG0);
     esp_rtos::start(timg0.timer0);
 
-    let uart_config = Config::default().with_baudrate(MOTOR_BAUD_RATE);
-    let uart = Uart::new(p.UART1, uart_config)
-        .expect("Failed to initialize UART")
-        .with_tx(p.GPIO17)
-        .with_rx(p.GPIO18);
-
-    let de = Output::new(p.GPIO21, Level::Low, OutputConfig::default());
-    let rs485 = Rs485::new(uart, de);
-
-    let transport = Rs485ModbusTransport::new(rs485, Delay);
-    let motor = Motor57AIM::new(
-        Modbus::new(transport, DEVICE_ADDR),
-        Motor57AIMConfig::default(),
-        Delay,
-    );
-
     static MECHANICAL: MechanicalConfig = MechanicalConfig {
         pulley_teeth: 20,
         belt_pitch_mm: 2.0,
     };
     let limits = MotionLimits::default();
 
-    let board = Rs485Board::new(motor, &MECHANICAL);
+    let motor = SimMotor::new();
+    let board = SimBoard::new(motor, &MECHANICAL);
     let controller = OSSM.controller(board, limits.clone(), UPDATE_INTERVAL_SECS);
 
     let sw_int = SoftwareInterruptControl::new(p.SW_INTERRUPT);
@@ -178,6 +172,12 @@ async fn main(spawner: Spawner) {
     let connector = BleConnector::new(radio, p.BT, Default::default())
         .expect("Could not create BleConnector");
     ble_remote::start(&spawner, connector, &PATTERNS);
+
+    if TELEMETRY_ENABLED {
+        let usb_serial = UsbSerialJtag::new(p.USB_DEVICE).into_async();
+        spawner.spawn(telemetry_writer_task(usb_serial)).unwrap();
+        spawner.spawn(core_telemetry_task()).unwrap();
+    }
 
     let mut pattern_runner = PATTERNS.runner(AnyPattern::all_builtin());
     pattern_runner.run(Delay).await;
