@@ -165,19 +165,7 @@ Features are optional higher-level capabilities built on top of the core motion 
    cargo install espflash
    ```
 
-<<<<<<< HEAD
-5. **(Optional) Enable dev features** by copying the sample environment file:
-
-   ```sh
-   cp .env.sample .env
-   ```
-
-   This sets `ESP_LOG=info` which enables runtime log output when flashing. You can change the log level in `.env` to `debug`, `warn`, `error`, etc.
-
-6. You should now be able to build and flash for your board:
-=======
 5. You should now be able to build and flash:
->>>>>>> 452db1e (feat(logging): Unify logging for better debugging)
 
    ```sh
    just build-ossm-alt    # OSSM Alt Edition
