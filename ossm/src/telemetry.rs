@@ -1,4 +1,3 @@
-use embassy_futures::select;
 use embassy_time::{Duration, Ticker};
 use telemetry::protocol::FrameType;
 use telemetry::transport::TelemetrySender;
@@ -58,32 +57,15 @@ impl CoreTelemetry {
     }
 }
 
-/// Produces core telemetry frames, emitting only when state changes.
-///
-/// Wakes on phase transitions (via pubsub) or a 20ms poll tick.
-/// Skips sending if nothing has changed since the last frame.
+/// Produces core telemetry frames at a fixed 50Hz (20ms) interval.
 pub async fn telemetry_task(ossm: &'static Ossm, sender: &TelemetrySender) -> ! {
-    let mut phase_sub = ossm.phase_subscriber().expect("No subscriber slots available");
     let mut ticker = Ticker::every(Duration::from_millis(20));
     let mut sequence: u16 = 0;
-    let mut last_state: Option<MotionState> = None;
 
     loop {
-        select::select(phase_sub.next_message_pure(), ticker.next()).await;
+        ticker.next().await;
 
         let state = ossm.motion_state();
-
-        if let Some(prev) = &last_state {
-            if state.phase == prev.phase
-                && state.position == prev.position
-                && state.velocity == prev.velocity
-                && state.torque == prev.torque
-            {
-                continue;
-            }
-        }
-
-        last_state = Some(state);
 
         let telem = CoreTelemetry::from_state(&state, sequence);
         let mut payload = [0u8; CoreTelemetry::SIZE];

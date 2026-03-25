@@ -2446,6 +2446,7 @@ dependencies = [
  "embassy-futures",
  "embassy-sync 0.7.2",
  "embassy-time",
+ "embedded-io-async 0.7.0",
  "esp-alloc",
  "esp-backtrace",
  "esp-bootloader-esp-idf",
@@ -2454,13 +2455,14 @@ dependencies = [
  "esp-radio",
  "esp-rtos",
  "log",
- "m57aim-motor",
  "ossm",
  "ossm-m5-remote",
  "pattern-engine",
  "portable-atomic",
- "rs485-board",
+ "sim-board",
+ "sim-motor",
  "static_cell",
+ "telemetry",
 ]
 
 [[package]]

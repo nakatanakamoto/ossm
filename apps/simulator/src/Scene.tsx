@@ -23,7 +23,6 @@ import {
 } from "three";
 import type { Object3D } from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import type { Simulator } from "sim-wasm";
 import { useAppearance } from "./hooks/useAppearance";
 
 const MODEL_URL = "/models/ossm-alt.gltf";
@@ -53,10 +52,10 @@ function collectGeometries(root: Object3D): BufferGeometry | null {
 }
 
 function Model({
-  simulator,
+  getPosition,
   onOrbitTarget,
 }: {
-  simulator: Simulator;
+  getPosition: () => number;
   onOrbitTarget?: (center: Vector3) => void;
 }) {
   const { scene } = useGLTF(MODEL_URL);
@@ -82,7 +81,7 @@ function Model({
 
   useFrame(() => {
     if (railRef.current) {
-      const pos = simulator.get_position();
+      const pos = getPosition();
       railRef.current.position.z = -(1 - pos) * RAIL_TRAVEL;
     }
   });
@@ -106,11 +105,11 @@ const RESET_LERP_SPEED = 0.08;
 const RESET_SNAP_THRESHOLD = 0.0001;
 
 function SceneContent({
-  simulator,
+  getPosition,
   handle,
   zoom,
 }: {
-  simulator: Simulator;
+  getPosition: () => number;
   handle: React.Ref<SceneHandle>;
   zoom: number;
 }) {
@@ -166,7 +165,7 @@ function SceneContent({
       <directionalLight position={[1, 2, 3]} intensity={isDark ? 0.8 : 1.5} />
       <directionalLight position={[-1, 1, -1]} intensity={isDark ? 0.3 : 0.5} />
       <Environment preset="studio" environmentIntensity={isDark ? 0.4 : 1} />
-      <Model simulator={simulator} onOrbitTarget={onOrbitTarget} />
+      <Model getPosition={getPosition} onOrbitTarget={onOrbitTarget} />
       <OrthographicCamera
         makeDefault
         position={INITIAL_CAMERA}
@@ -180,14 +179,14 @@ function SceneContent({
 }
 
 const Scene = memo(
-  forwardRef<SceneHandle, { simulator: Simulator; zoom?: number }>(
-    function Scene({ simulator, zoom = 1500 }, ref) {
+  forwardRef<SceneHandle, { getPosition: () => number; zoom?: number }>(
+    function Scene({ getPosition, zoom = 1500 }, ref) {
       return (
         <Canvas
           gl={{ toneMapping: ACESFilmicToneMapping, toneMappingExposure: 1.2 }}
           style={{ width: "100%", height: "100%" }}
         >
-          <SceneContent simulator={simulator} handle={ref} zoom={zoom} />
+          <SceneContent getPosition={getPosition} handle={ref} zoom={zoom} />
         </Canvas>
       );
     },

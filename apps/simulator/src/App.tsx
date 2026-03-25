@@ -29,6 +29,7 @@ import {
   PauseIcon,
   StopIcon,
 } from "@radix-ui/react-icons";
+import { Link } from "react-router";
 import Scene from "./Scene";
 import type { SceneHandle } from "./Scene";
 
@@ -148,7 +149,7 @@ export default function App() {
           >
             <Scene
               ref={sceneRef}
-              simulator={simulator}
+              getPosition={() => simulator.get_position()}
               zoom={isMobile ? 900 : 1500}
             />
           </Suspense>
@@ -321,6 +322,10 @@ export default function App() {
                   style={{ width: "100%" }}
                 >
                   <ResetIcon /> Reset View
+                </Button>
+
+                <Button variant="outline" asChild style={{ width: "100%" }}>
+                  <Link to="/device">Device Mode</Link>
                 </Button>
               </Flex>
             </ScrollArea>
