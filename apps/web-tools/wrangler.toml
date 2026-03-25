@@ -2,7 +2,7 @@ name = "web-tools"
 compatibility_date = "2026-03-25"
 
 routes = [
-  { pattern = "web-tools.nakata.dev", custom_domain = true },
+  { pattern = "web-tools.ossm.rs", custom_domain = true },
 ]
 
 [assets]

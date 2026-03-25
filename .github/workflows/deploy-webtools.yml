@@ -50,7 +50,7 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
             echo "environment=Production" >> "$GITHUB_OUTPUT"
-            echo "url=https://web-tools.nakata.dev" >> "$GITHUB_OUTPUT"
+            echo "url=https://web-tools.ossm.rs" >> "$GITHUB_OUTPUT"
             echo "transient=false" >> "$GITHUB_OUTPUT"
           else
             echo "environment=Preview (PR #${{ github.event.pull_request.number }})" >> "$GITHUB_OUTPUT"
