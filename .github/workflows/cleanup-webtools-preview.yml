@@ -1,0 +1,18 @@
+name: Cleanup Web Tools Preview
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  cleanup:
+    name: Cleanup PR Preview
+    runs-on: ubuntu-latest
+    permissions:
+      deployments: write
+    steps:
+      - name: Deactivate GitHub deployment
+        uses: strumwolf/delete-deployment-environment@v3
+        with:
+          token: ${{ github.token }}
+          environment: "Preview (PR #${{ github.event.pull_request.number }})"

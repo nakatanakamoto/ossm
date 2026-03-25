@@ -1,0 +1,29 @@
+name = "ossm-web-tools"
+compatibility_date = "2026-03-25"
+
+routes = [
+  { pattern = "web-tools.nakata.dev", custom_domain = true },
+]
+
+[env.staging]
+routes = [
+  { pattern = "staging.web-tools.nakata.dev", custom_domain = true },
+]
+
+[assets]
+directory = "dist"
+
+[observability]
+enabled = false
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = true
+
+[observability.traces]
+enabled = false
+persist = true
+head_sampling_rate = 1
