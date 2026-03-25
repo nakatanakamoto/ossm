@@ -11,7 +11,7 @@ embedded-hal-bus = "0.3.0"
 embedded-graphics = "0.8"
 ratatui = { version = "0.30", default-features = false }
 mipidsi = "0.10.0"
-embassy-time = "0.5.0"
+embassy-time = "0.5.1"
 libm = "0.2"
 log = "0.4"
 static_cell = "2.1.1"
