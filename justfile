@@ -37,7 +37,7 @@ build-wasm:
     wasm-pack build firmware/sim-wasm --target web
 
 # Dev server (watches Rust sources and hot-reloads WASM)
-[working-directory: 'apps/simulator']
+[working-directory: 'apps/web-tools']
 dev-patterns: build-wasm
     pnpm dev --host
 
