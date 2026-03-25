@@ -1,8 +1,12 @@
 name: Deploy Web Tools
 
 on:
-  release:
-    types: [published]
+  workflow_dispatch:
+    inputs:
+      production:
+        description: "Deploy to production"
+        type: boolean
+        default: false
   push:
     branches: [main]
   pull_request:
@@ -49,11 +53,11 @@ jobs:
       - name: Set deploy metadata
         id: meta
         run: |
-          if [ "${{ github.event_name }}" = "release" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.production }}" = "true" ]; then
             echo "environment=Production" >> "$GITHUB_OUTPUT"
             echo "url=https://web-tools.nakata.dev" >> "$GITHUB_OUTPUT"
             echo "transient=false" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event_name }}" = "push" ]; then
+          elif [ "${{ github.event_name }}" = "push" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "environment=Staging" >> "$GITHUB_OUTPUT"
             echo "url=https://staging.web-tools.nakata.dev" >> "$GITHUB_OUTPUT"
             echo "transient=false" >> "$GITHUB_OUTPUT"
@@ -73,7 +77,7 @@ jobs:
           transient-environment: ${{ steps.meta.outputs.transient }}
 
       - name: Deploy to production
-        if: github.event_name == 'release'
+        if: github.event_name == 'workflow_dispatch' && inputs.production == true
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -83,7 +87,7 @@ jobs:
           workingDirectory: apps/web-tools
 
       - name: Deploy to staging
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.production == false)
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -99,7 +103,7 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: "4"
-          command: versions upload --preview-alias pr-${{ github.event.pull_request.number }}
+          command: versions upload --env="" --preview-alias pr-${{ github.event.pull_request.number }}
           workingDirectory: apps/web-tools
 
       - name: Update deployment status (success)
