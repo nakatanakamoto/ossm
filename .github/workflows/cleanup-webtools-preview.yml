@@ -16,3 +16,13 @@ jobs:
         with:
           token: ${{ github.token }}
           environment: "Preview (PR #${{ github.event.pull_request.number }})"
+
+      - name: Delete PR firmware from R2
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          PR=${{ github.event.pull_request.number }}
+          for board in ossm-alt waveshare; do
+            npx wrangler@4 r2 object delete --remote "ossm-firmware/pr-${PR}/${board}.bin" 2>/dev/null || true
+          done

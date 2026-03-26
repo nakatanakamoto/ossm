@@ -14,7 +14,7 @@ jobs:
       new_tag: ${{ steps.tag.outputs.new_tag }}
       changelog: ${{ steps.tag.outputs.changelog }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
