@@ -1,6 +1,7 @@
 name = "web-tools"
 main = "src/api/index.ts"
 compatibility_date = "2026-03-17"
+preview_urls = true
 
 routes = [{ pattern = "web-tools.ossm.rs", custom_domain = true }]
 
