@@ -23,15 +23,6 @@ build-waveshare:
 flash-waveshare:
     cargo +esp run --release
 
-# M5CoreS3 Simulator (ESP32-S3)
-[working-directory: 'firmware/sim-m5cores3']
-build-m5cores3:
-    cargo +esp build --release
-    
-[working-directory: 'firmware/sim-m5cores3']
-flash-m5cores3:
-    cargo +esp run --release
-
 # WASM Simulator
 build-wasm:
     wasm-pack build firmware/sim-wasm --target web
@@ -43,7 +34,7 @@ dev-patterns: build-wasm
 
 # All
 [parallel]
-build-all: build-ossm-alt build-waveshare build-wasm build-m5cores3
+build-all: build-ossm-alt build-waveshare build-wasm
 
 # Check that all required tools are installed
 [unix]
