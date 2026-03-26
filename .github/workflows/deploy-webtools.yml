@@ -89,7 +89,7 @@ jobs:
           workingDirectory: apps/web-tools
 
       - name: Update deployment status (success)
-        if: success() && github.actor != 'dependabot[bot]'
+        if: success() && steps.deployment.outputs.deployment_id
         uses: chrnorm/deployment-status@v2
         with:
           token: ${{ github.token }}
@@ -98,7 +98,7 @@ jobs:
           environment-url: ${{ steps.meta.outputs.url }}
 
       - name: Update deployment status (failure)
-        if: failure() && github.actor != 'dependabot[bot]'
+        if: failure() && steps.deployment.outputs.deployment_id
         uses: chrnorm/deployment-status@v2
         with:
           token: ${{ github.token }}

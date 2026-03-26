@@ -17,21 +17,30 @@
     "@radix-ui/themes": "^3.3.0",
     "@react-three/drei": "^10.0.0",
     "@react-three/fiber": "^9.0.0",
+    "crypto-js": "^4.2.0",
+    "esptool-js": "^0.5.7",
+    "hono": "^4.12.9",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-router": "^7.13.2",
     "sim-wasm": "link:../../firmware/sim-wasm/pkg",
     "three": "^0.183.2"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.30.1",
+    "@cloudflare/workers-types": "^4.20260317.1",
+    "@types/crypto-js": "^4.2.2",
     "@types/node": ">=24 <25",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.0.0",
     "@types/three": "^0.183.1",
+    "@types/w3c-web-serial": "^1.0.8",
     "@vitejs/plugin-react": "^5.2.0",
     "three-stdlib": "^2.36.1",
     "typescript": "~5.9.3",
     "vite": "^8.0.2",
     "vite-plugin-top-level-await": "^1.4.0",
-    "vite-plugin-wasm": "^3.6.0"
+    "vite-plugin-wasm": "^3.6.0",
+    "wrangler": "^4.77.0"
   }
 }

@@ -1,4 +1,5 @@
 import { defineConfig, type Plugin } from "vite";
+import { cloudflare } from "@cloudflare/vite-plugin";
 import react from "@vitejs/plugin-react";
 import wasm from "vite-plugin-wasm";
 import topLevelAwait from "vite-plugin-top-level-await";
@@ -80,5 +81,5 @@ export default defineConfig({
       ignored: ["**/firmware/sim-wasm/pkg/**"],
     },
   },
-  plugins: [react(), wasm(), topLevelAwait(), wasmHotReload()],
+  plugins: [react(), wasm(), topLevelAwait(), wasmHotReload(), cloudflare()],
 });

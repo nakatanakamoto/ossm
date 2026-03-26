@@ -36,7 +36,7 @@ Then add the WASM target and install simulator dependencies:
 
 ```sh
 rustup target add wasm32-unknown-unknown
-pnpm install --dir apps/simulator
+pnpm install --dir apps/web-tools
 ```
 
 ## Running the Simulator
@@ -48,9 +48,15 @@ just dev-patterns
 This does two things in sequence:
 
 1. **`build-wasm`** - runs `wasm-pack build firmware/sim-wasm --target web`, which compiles the pattern engine (and its WASM firmware wrapper) into a WebAssembly module.
-2. **`dev`** - starts the Vite dev server in `apps/simulator/` with `--host` so you can access it from other devices on your network.
+2. **`dev`** - starts the Vite dev server in `apps/web-tools/` with `--host` so you can access it from other devices on your network.
 
 The simulator renders a 3D model of the OSSM and runs your patterns in the browser. Change a pattern and the wasm will recompile and the browser will reload.
+
+### Cloudflare Worker Functions
+
+The web tools app includes Cloudflare Worker functions (e.g. the GitHub asset proxy used by the flasher) in `src/api/`. The Cloudflare Vite plugin runs these in the local `workerd` runtime during `pnpm dev`, so both the SPA and `/api/*` routes work with HMR out of the box.
+
+Cloudflare Worker functions should be used sparingly and only when entirely necessary (e.g. proxying requests to avoid CORS issues). Prefer doing work client-side wherever possible.
 
 ## Adding a New Pattern
 
