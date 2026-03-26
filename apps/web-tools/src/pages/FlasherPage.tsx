@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from "react";
+import { useParams, useNavigate } from "react-router";
 import { ESPLoader, Transport } from "esptool-js";
 import CryptoJS from "crypto-js";
 import {
@@ -14,16 +15,22 @@ import {
   Progress,
   ScrollArea,
   Code,
+  AlertDialog,
+  Avatar,
 } from "@radix-ui/themes";
 import {
   InfoCircledIcon,
   ExclamationTriangleIcon,
+  DownloadIcon,
 } from "@radix-ui/react-icons";
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useGithubReleases } from "../hooks/useGithubReleases";
+import { usePrFirmware } from "../hooks/usePrFirmware";
+import { useGithubPr } from "../hooks/useGithubPr";
 
 const BAUD = 921600;
 
-// Friendly labels for known firmware binaries; anything else falls back to the filename
 const BOARD_LABELS: Record<string, string> = {
   "ossm-alt": "OSSM Alt",
   waveshare: "Waveshare ESP32-S3-RS485-CAN",
@@ -37,14 +44,33 @@ type FlashState =
   | "done"
   | "error";
 
+type FlashMode = "release" | "pr";
+
 export default function FlasherPage() {
+  const params = useParams<{
+    release?: string;
+    pr?: string;
+    board?: string;
+  }>();
+  const navigate = useNavigate();
+
   const {
     releases,
     loading: releasesLoading,
     error: releasesError,
   } = useGithubReleases();
-  const [selectedRelease, setSelectedRelease] = useState<string>("");
-  const [selectedBoard, setSelectedBoard] = useState<string>("");
+
+  const mode: FlashMode = params.pr ? "pr" : "release";
+  const prNumber = params.pr ?? null;
+
+  const {
+    boards: prBoards,
+    loading: prLoading,
+    error: prError,
+  } = usePrFirmware(prNumber);
+
+  const { prInfo } = useGithubPr(prNumber);
+
   const [flashState, setFlashState] = useState<FlashState>("idle");
   const [progress, setProgress] = useState(0);
   const [logs, setLogs] = useState<string[]>([]);
@@ -63,8 +89,17 @@ export default function FlasherPage() {
     };
   }, []);
 
-  // Derive available boards from the selected release's .bin assets
-  const boards = useMemo(() => {
+  // Resolve selected release: use URL param if valid, otherwise fall back to first
+  const selectedRelease = useMemo(() => {
+    if (mode === "pr") return "";
+    if (params.release && releases.some((r) => r.tag_name === params.release)) {
+      return params.release;
+    }
+    return releases[0]?.tag_name ?? "";
+  }, [mode, params.release, releases]);
+
+  // Derive available boards from the selected release's .bin assets (release mode)
+  const releaseBoards = useMemo(() => {
     const release = releases.find((r) => r.tag_name === selectedRelease);
     if (!release) return [];
     return release.assets
@@ -72,16 +107,72 @@ export default function FlasherPage() {
       .map((a) => {
         const stem = a.name.replace(/\.bin$/, "");
         return {
-          value: a.name,
+          value: stem,
           label: BOARD_LABELS[stem] ?? a.name,
-          asset: a,
+          assetId: a.id,
+          size: a.size,
         };
       });
   }, [releases, selectedRelease]);
 
+  // Unified board list for PR mode
+  const prBoardOptions = useMemo(() => {
+    return prBoards.map((b) => ({
+      value: b.board,
+      label: BOARD_LABELS[b.board] ?? b.board,
+      size: b.size,
+    }));
+  }, [prBoards]);
+
+  const boards = mode === "pr" ? prBoardOptions : releaseBoards;
+
+  // Resolve selected board: use URL param if valid, otherwise empty (user must choose)
+  const selectedBoard = useMemo(() => {
+    if (params.board && boards.some((b) => b.value === params.board)) {
+      return params.board;
+    }
+    return "";
+  }, [params.board, boards]);
+
+  // Keep URL in sync when release default is resolved
+  useEffect(() => {
+    if (mode === "pr") return;
+    if (releasesLoading || releasesError || releases.length === 0) return;
+    if (params.release !== selectedRelease && selectedRelease) {
+      navigate(`/firmware/release/${selectedRelease}`, { replace: true });
+    }
+  }, [
+    mode,
+    releasesLoading,
+    releasesError,
+    releases,
+    selectedRelease,
+    params.release,
+    navigate,
+  ]);
+
+  const handleReleaseChange = useCallback(
+    (value: string) => {
+      navigate(`/firmware/release/${value}`, { replace: true });
+    },
+    [navigate],
+  );
+
+  const handleBoardChange = useCallback(
+    (value: string) => {
+      if (mode === "pr") {
+        navigate(`/firmware/pr/${prNumber}/${value}`, { replace: true });
+      } else {
+        navigate(`/firmware/release/${selectedRelease}/${value}`, {
+          replace: true,
+        });
+      }
+    },
+    [mode, prNumber, selectedRelease, navigate],
+  );
+
   const appendLog = useCallback((line: string) => {
     setLogs((prev) => [...prev, line]);
-    // Auto-scroll on next frame
     requestAnimationFrame(() => {
       logEndRef.current?.scrollIntoView({ behavior: "smooth" });
     });
@@ -95,7 +186,6 @@ export default function FlasherPage() {
 
   const handleConnect = useCallback(async () => {
     if (flashState === "connected" || flashState === "connecting") {
-      // Disconnect
       if (transportRef.current) {
         await transportRef.current.disconnect();
       }
@@ -142,19 +232,24 @@ export default function FlasherPage() {
 
     const board = boards.find((b) => b.value === selectedBoard);
     if (!board) {
-      appendLog(`No binary selected`);
+      appendLog("No binary selected");
       setFlashState("error");
       return;
     }
-
-    const asset = board.asset;
 
     try {
       setFlashState("flashing");
       setProgress(0);
 
-      appendLog(`Downloading ${asset.name} (${formatBytes(asset.size)})...`);
-      const response = await fetch(`/api/github-asset/${asset.id}`);
+      const url =
+        mode === "pr"
+          ? `/api/pr-firmware/${prNumber}/${selectedBoard}`
+          : `/api/github-asset/${(board as (typeof releaseBoards)[number]).assetId}`;
+
+      appendLog(
+        `Downloading ${selectedBoard}.bin (${formatBytes(board.size)})...`,
+      );
+      const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`Download failed: ${response.status}`);
       }
@@ -192,23 +287,23 @@ export default function FlasherPage() {
       appendLog(`Flash failed: ${err instanceof Error ? err.message : err}`);
       setFlashState("error");
     }
-  }, [boards, selectedBoard, appendLog]);
+  }, [boards, selectedBoard, mode, prNumber, releaseBoards, appendLog]);
 
-  // Auto-select the first release when loaded
-  if (releases.length > 0 && !selectedRelease) {
-    setSelectedRelease(releases[0].tag_name);
-  }
-
-  // Auto-select first board when boards change (release changed or loaded)
-  if (boards.length > 0 && !boards.some((b) => b.value === selectedBoard)) {
-    setSelectedBoard(boards[0].value);
-  }
+  const downloadUrl = useMemo(() => {
+    if (!selectedBoard) return null;
+    if (mode === "pr") return `/api/pr-firmware/${prNumber}/${selectedBoard}`;
+    const board = releaseBoards.find((b) => b.value === selectedBoard);
+    if (!board) return null;
+    return `/api/github-asset/${board.assetId}`;
+  }, [mode, prNumber, selectedBoard, releaseBoards]);
 
   const isConnected =
     flashState === "connected" ||
     flashState === "flashing" ||
     flashState === "done";
   const isFlashing = flashState === "flashing";
+  const sourceLoading = mode === "pr" ? prLoading : releasesLoading;
+  const sourceError = mode === "pr" ? prError : releasesError;
 
   return (
     <Flex
@@ -220,8 +315,21 @@ export default function FlasherPage() {
     >
       <Box style={{ width: "100%", maxWidth: 600 }}>
         <Heading size="5" mb="4">
-          Firmware Flasher
+          Flash Firmware
         </Heading>
+
+        {mode === "pr" && (
+          <Callout.Root color="orange" mb="4">
+            <Callout.Icon>
+              <ExclamationTriangleIcon />
+            </Callout.Icon>
+            <Callout.Text>
+              This is an unreviewed pre-release build from a pull request. It
+              has not been tested or approved and could cause unexpected
+              behaviour. Only flash this firmware if you know what you're doing.
+            </Callout.Text>
+          </Callout.Root>
+        )}
 
         {!webSerialSupported && (
           <Callout.Root color="red" mb="4">
@@ -235,60 +343,137 @@ export default function FlasherPage() {
           </Callout.Root>
         )}
 
-        <Card size="2">
-          <Flex direction="column" gap="4">
+        {mode === "pr" && prNumber && prInfo && (
+          <Card size="2" mb="4">
             <Flex direction="column" gap="2">
-              <Text size="2" weight="medium" as="label">
-                Release
-              </Text>
-              {releasesLoading ? (
-                <Text size="2" color="gray">
-                  Loading releases...
+              <Flex align="center" gap="2">
+                <Avatar
+                  size="1"
+                  src={prInfo.author.avatar_url}
+                  fallback={prInfo.author.username[0]}
+                  radius="full"
+                  style={{ width: 16, height: 16, flexShrink: 0 }}
+                />
+                <Text size="1" color="gray" weight="medium">
+                  <a
+                    href={prInfo.author.html_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {prInfo.author.username}
+                  </a>
+                  {" "}opened{" "}
+                  <a
+                    href={`https://github.com/ossm-rs/ossm/pull/${prNumber}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    PR #{prNumber}
+                  </a>
                 </Text>
-              ) : releasesError ? (
-                <Callout.Root color="red" size="1">
-                  <Callout.Icon>
-                    <ExclamationTriangleIcon />
-                  </Callout.Icon>
-                  <Callout.Text>{releasesError}</Callout.Text>
-                </Callout.Root>
-              ) : (
-                <Select.Root
-                  value={selectedRelease}
-                  onValueChange={setSelectedRelease}
-                  disabled={isConnected}
-                >
-                  <Select.Trigger style={{ width: "100%" }} />
-                  <Select.Content>
-                    {releases.map((r) => (
-                      <Select.Item key={r.tag_name} value={r.tag_name}>
-                        {r.tag_name}
-                        {r.name && r.name !== r.tag_name ? ` — ${r.name}` : ""}
-                      </Select.Item>
-                    ))}
-                  </Select.Content>
-                </Select.Root>
+              </Flex>
+              <Heading size="4">{prInfo.title}</Heading>
+              {prInfo.body && (
+                <Flex direction="column" gap="1">
+                  <Separator size="4" />
+                  <Text size="2" color="gray" asChild>
+                    <div>
+                      <Markdown remarkPlugins={[remarkGfm]}>
+                        {prInfo.body}
+                      </Markdown>
+                    </div>
+                  </Text>
+                </Flex>
               )}
             </Flex>
+          </Card>
+        )}
+
+        <Card size="2">
+          <Flex direction="column" gap="4">
+            {mode === "release" && (
+              <Flex direction="column" gap="2">
+                <Text size="2" weight="medium" as="label">
+                  Release
+                </Text>
+                {releasesLoading ? (
+                  <Text size="2" color="gray">
+                    Loading releases...
+                  </Text>
+                ) : releasesError ? (
+                  <Callout.Root color="red" size="1">
+                    <Callout.Icon>
+                      <ExclamationTriangleIcon />
+                    </Callout.Icon>
+                    <Callout.Text>{releasesError}</Callout.Text>
+                  </Callout.Root>
+                ) : (
+                  <Select.Root
+                    value={selectedRelease}
+                    onValueChange={handleReleaseChange}
+                    disabled={isConnected}
+                  >
+                    <Select.Trigger style={{ width: "100%" }} />
+                    <Select.Content>
+                      {releases.map((r) => (
+                        <Select.Item key={r.tag_name} value={r.tag_name}>
+                          {r.tag_name}
+                          {r.name && r.name !== r.tag_name
+                            ? ` - ${r.name}`
+                            : ""}
+                        </Select.Item>
+                      ))}
+                    </Select.Content>
+                  </Select.Root>
+                )}
+              </Flex>
+            )}
 
             <Flex direction="column" gap="2">
               <Text size="2" weight="medium" as="label">
                 Board
               </Text>
-              <Select.Root
-                value={selectedBoard}
-                onValueChange={setSelectedBoard}
-                disabled={isConnected || boards.length === 0}
-              >
-                <Select.Trigger style={{ width: "100%" }} />
-                <Select.Content>
-                  {boards.map((b) => (
-                    <Select.Item key={b.value} value={b.value}>
-                      {b.label}
-                    </Select.Item>
-                  ))}
-                </Select.Content>
-              </Select.Root>
+              {sourceLoading ? (
+                <Text size="2" color="gray">
+                  Loading firmware...
+                </Text>
+              ) : sourceError ? (
+                <Callout.Root color="red" size="1">
+                  <Callout.Icon>
+                    <ExclamationTriangleIcon />
+                  </Callout.Icon>
+                  <Callout.Text>{sourceError}</Callout.Text>
+                </Callout.Root>
+              ) : mode === "pr" && boards.length === 0 ? (
+                <Callout.Root color="orange" size="1">
+                  <Callout.Icon>
+                    <ExclamationTriangleIcon />
+                  </Callout.Icon>
+                  <Callout.Text>
+                    No firmware builds found for this pull request. The CI
+                    pipeline may not have finished yet, or this PR may not
+                    produce firmware.
+                  </Callout.Text>
+                </Callout.Root>
+              ) : (
+                <Select.Root
+                  value={selectedBoard}
+                  onValueChange={handleBoardChange}
+                  disabled={isConnected || boards.length === 0}
+                >
+                  <Select.Trigger
+                    style={{ width: "100%" }}
+                    placeholder="Select a board"
+                  />
+                  <Select.Content>
+                    {boards.map((b) => (
+                      <Select.Item key={b.value} value={b.value}>
+                        {b.label}
+                      </Select.Item>
+                    ))}
+                  </Select.Content>
+                </Select.Root>
+              )}
             </Flex>
 
             <Separator size="4" />
@@ -308,13 +493,45 @@ export default function FlasherPage() {
               </Button>
               <Button
                 onClick={handleFlash}
-                disabled={!isConnected || isFlashing || !selectedRelease}
+                disabled={!isConnected || isFlashing || !selectedBoard}
                 variant="solid"
                 color="green"
                 style={{ flex: 1 }}
               >
                 {isFlashing ? "Flashing..." : "Flash"}
               </Button>
+              <AlertDialog.Root>
+                <AlertDialog.Trigger>
+                  <Button variant="soft" disabled={!selectedBoard}>
+                    <DownloadIcon />
+                  </Button>
+                </AlertDialog.Trigger>
+                <AlertDialog.Content maxWidth="400px">
+                  <AlertDialog.Title>Download firmware</AlertDialog.Title>
+                  <AlertDialog.Description>
+                    You don't need to download the firmware to flash your
+                    device. Just connect your board and hit Flash - it all
+                    happens in the browser.
+                  </AlertDialog.Description>
+                  <Flex gap="3" mt="4" justify="end">
+                    <AlertDialog.Cancel>
+                      <Button variant="soft" color="gray">
+                        Cancel
+                      </Button>
+                    </AlertDialog.Cancel>
+                    <AlertDialog.Action>
+                      <Button asChild variant="solid">
+                        <a
+                          href={downloadUrl ?? "#"}
+                          download={`${selectedBoard}.bin`}
+                        >
+                          Download anyway
+                        </a>
+                      </Button>
+                    </AlertDialog.Action>
+                  </Flex>
+                </AlertDialog.Content>
+              </AlertDialog.Root>
             </Flex>
 
             {isFlashing && (

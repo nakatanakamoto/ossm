@@ -22,7 +22,9 @@
     "hono": "^4.12.9",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-markdown": "^10.1.0",
     "react-router": "^7.13.2",
+    "remark-gfm": "^4.0.1",
     "sim-wasm": "link:../../firmware/sim-wasm/pkg",
     "three": "^0.183.2"
   },

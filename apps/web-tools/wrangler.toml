@@ -5,6 +5,10 @@ preview_urls = true
 
 routes = [{ pattern = "web-tools.ossm.rs", custom_domain = true }]
 
+[[r2_buckets]]
+binding = "FIRMWARE_BUCKET"
+bucket_name = "ossm-firmware"
+
 [assets]
 directory = "dist"
 binding = "ASSETS"

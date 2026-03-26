@@ -35,10 +35,10 @@ export default function Layout() {
                   </TabNav.Link>
                 )}
               </NavLink>
-              <NavLink to="/flasher">
+              <NavLink to="/firmware">
                 {({ isActive }) => (
                   <TabNav.Link asChild active={isActive}>
-                    <span>Flasher</span>
+                    <span>Firmware</span>
                   </TabNav.Link>
                 )}
               </NavLink>

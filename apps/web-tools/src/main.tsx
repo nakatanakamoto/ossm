@@ -15,6 +15,13 @@ createRoot(document.getElementById("root")!).render(
         <Routes>
           <Route element={<Layout />}>
             <Route index element={<SimulatorPage />} />
+            <Route path="firmware" element={<FlasherPage />}>
+              <Route path="release/:release/:board" element={null} />
+              <Route path="release/:release" element={null} />
+              <Route path="release" element={null} />
+              <Route path="pr/:pr/:board" element={null} />
+              <Route path="pr/:pr" element={null} />
+            </Route>
             <Route path="flasher" element={<FlasherPage />} />
           </Route>
         </Routes>

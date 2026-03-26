@@ -18,7 +18,7 @@ jobs:
       deployments: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: Swatinem/rust-cache@v2
 
       - name: Install wasm-pack
@@ -33,7 +33,7 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           version: 10
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version-file: apps/web-tools/.nvmrc
           cache: pnpm
@@ -116,5 +116,10 @@ jobs:
         with:
           header: cloudflare-preview
           message: |
-            :rocket: [Preview deployment for this PR](https://pr-${{ github.event.pull_request.number }}-web-tools.ossm-rs.workers.dev)
-            Deployed on ${{ steps.timestamp.outputs.time }}
+            ## Web Tools Preview
+
+            Preview deployment for this PR is ready.
+
+            https://pr-${{ github.event.pull_request.number }}-web-tools.ossm-rs.workers.dev
+
+            <sub>Deployed on ${{ steps.timestamp.outputs.time }}</sub>
