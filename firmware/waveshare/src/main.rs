@@ -78,6 +78,8 @@ async fn motion_task(mut controller: MotionController<'static, ConcreteBoard>) {
 async fn main(spawner: Spawner) {
     esp_println::logger::init_logger_from_env();
 
+    ossm::build_info!();
+
     let p = esp_hal::init(esp_hal::Config::default());
 
     esp_alloc::heap_allocator!(size: 128 * 1024);

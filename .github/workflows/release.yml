@@ -29,6 +29,7 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       upload-artifacts: true
+      release-id: ${{ needs.tag.outputs.new_tag }}
 
   release:
     name: Create release

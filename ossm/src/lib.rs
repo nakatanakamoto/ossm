@@ -2,6 +2,7 @@
 extern crate alloc;
 
 mod board;
+mod build_info;
 mod command;
 mod limits;
 pub mod logging;
