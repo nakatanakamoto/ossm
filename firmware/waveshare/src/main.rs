@@ -80,7 +80,7 @@ async fn main(spawner: Spawner) {
 
     let p = esp_hal::init(esp_hal::Config::default());
 
-    esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: 73744);
+    esp_alloc::heap_allocator!(size: 128 * 1024);
 
     let timg0 = TimerGroup::new(p.TIMG0);
     esp_rtos::start(timg0.timer0);
