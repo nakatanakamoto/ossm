@@ -369,11 +369,12 @@ async fn heartbeat_check_task(engine: &'static PatternEngine) {
     loop {
         ticker.next().await;
 
-        let last_heartbeat = Instant::from_millis(LAST_HEARTBEAT.load(Ordering::Acquire));
-        let elapsed = last_heartbeat.elapsed().as_millis();
-
+        let last_heartbeat_ms = LAST_HEARTBEAT.load(Ordering::Acquire);
         let was_connected = CONNECTED.load(Ordering::Acquire);
-        let is_connected = elapsed <= MAX_NO_REMOTE_HEARTBEAT_MS;
+        let is_connected = last_heartbeat_ms > 0 && {
+            let elapsed = Instant::from_millis(last_heartbeat_ms).elapsed().as_millis();
+            elapsed <= MAX_NO_REMOTE_HEARTBEAT_MS
+        };
 
         CONNECTED.store(is_connected, Ordering::Release);
 
