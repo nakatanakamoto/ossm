@@ -6,27 +6,9 @@ rust-version = "1.88"
 
 [dependencies]
 ossm = { path = "../../ossm" }
-pattern-engine = { path = "../../features/pattern-engine" }
-m57aim-motor = { path = "../../drivers/m57aim" }
-rs485-board = { path = "../../boards/rs485" }
-ossm-m5-remote = { path = "../../features/ossm-m5-remote", features = [
-    "esp32s3",
-] }
-ble-remote = { path = "../../features/ble-remote", features = [
-    "esp32s3",
-] }
+ossm-esp = { path = "../../common/ossm-esp" }
 
 esp-hal = { version = "~1.0", features = ["log-04", "esp32s3", "unstable"] }
-
-esp-radio = { version = "0.17.0", default-features = false, features = [
-    "ble",
-    "esp-now",
-    "esp32s3",
-    "log-04",
-    "unstable",
-    "wifi",
-] }
-
 esp-rtos = { version = "0.2.0", features = [
     "log-04",
     "embassy",
@@ -34,13 +16,7 @@ esp-rtos = { version = "0.2.0", features = [
     "esp-radio",
     "esp32s3",
 ] }
-
 esp-bootloader-esp-idf = { version = "0.4.0", features = ["log-04", "esp32s3"] }
-
-log = { version = "0.4.27", features = ["release_max_level_info"] }
-
-embassy-executor = { version = "0.9.1", features = ["log"] }
-embassy-time = { version = "0.5.1", features = ["log"] }
 esp-alloc = { version = "0.9.0" }
 esp-backtrace = { version = "0.18.1", features = [
     "println",
@@ -48,10 +24,9 @@ esp-backtrace = { version = "0.18.1", features = [
     "panic-handler",
 ] }
 esp-println = { version = "0.16.1", features = ["esp32s3", "log-04"] }
+embassy-executor = { version = "0.9.1", features = ["log"] }
 
-embassy-futures = "0.1"
-embassy-sync = "0.7"
+log = { version = "0.4.27", features = ["release_max_level_info"] }
 
-critical-section = "1.2.0"
-portable-atomic = { version = "1", default-features = false }
-static_cell = "2.1.1"
+[build-dependencies]
+ossm-esp-build = { path = "../../common/ossm-esp-build" }
