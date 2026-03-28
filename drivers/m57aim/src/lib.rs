@@ -55,6 +55,10 @@ impl Default for Motor57AIMConfig {
     }
 }
 
+pub const DEFAULT_DEVICE_ADDR: u8 = 0x01;
+pub const STOCK_BAUD_RATE: u32 = 19_200;
+pub const TARGET_BAUD_RATE: u32 = 115_200;
+
 /// 57AIM BLDC servo motor, generic over communication interface and delay.
 pub struct Motor57AIM<I, D> {
     pub(crate) interface: I,
