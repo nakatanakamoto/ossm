@@ -25,7 +25,7 @@ use esp_radio::ble::controller::BleConnector;
 use esp_radio::esp_now::{EspNowManager, EspNowSender};
 use esp_rtos::embassy::InterruptExecutor;
 use log::info;
-use m57aim_motor::{Modbus, Motor57AIM, Motor57AIMConfig};
+use m57aim_motor::{DEFAULT_DEVICE_ADDR, Modbus, Motor57AIM, Motor57AIMConfig, TARGET_BAUD_RATE};
 use ossm::{MechanicalConfig, MotionController, MotionLimits, Ossm};
 
 use ossm_m5_remote::RemoteConfig;
@@ -41,8 +41,6 @@ extern crate alloc;
 esp_bootloader_esp_idf::esp_app_desc!();
 
 const UPDATE_INTERVAL_SECS: f64 = 0.01;
-const MOTOR_BAUD_RATE: u32 = 115_200;
-const DEVICE_ADDR: u8 = 0x01;
 
 macro_rules! mk_static {
     ($t:ty, $val:expr) => {{
@@ -91,7 +89,7 @@ async fn main(spawner: Spawner) {
     let timg0 = TimerGroup::new(p.TIMG0);
     esp_rtos::start(timg0.timer0);
 
-    let uart_config = Config::default().with_baudrate(MOTOR_BAUD_RATE);
+    let uart_config = Config::default().with_baudrate(TARGET_BAUD_RATE);
     let uart = Uart::new(p.UART1, uart_config)
         .expect("Failed to initialize UART")
         .with_tx(p.GPIO17)
@@ -102,7 +100,7 @@ async fn main(spawner: Spawner) {
 
     let transport = Rs485ModbusTransport::new(rs485, Delay);
     let motor = Motor57AIM::new(
-        Modbus::new(transport, DEVICE_ADDR),
+        Modbus::new(transport, DEFAULT_DEVICE_ADDR),
         Motor57AIMConfig::default(),
         Delay,
     );
