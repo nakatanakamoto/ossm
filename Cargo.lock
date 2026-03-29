@@ -1644,6 +1644,33 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
+name = "seeed-xiao"
+version = "0.1.0"
+dependencies = [
+ "ble-remote",
+ "critical-section",
+ "embassy-executor",
+ "embassy-futures",
+ "embassy-sync 0.7.2",
+ "embassy-time",
+ "esp-alloc",
+ "esp-backtrace",
+ "esp-bootloader-esp-idf",
+ "esp-hal",
+ "esp-println",
+ "esp-radio",
+ "esp-rtos",
+ "log",
+ "m57aim-motor",
+ "ossm",
+ "ossm-m5-remote",
+ "pattern-engine",
+ "portable-atomic",
+ "rs485-board",
+ "static_cell",
+]
+
+[[package]]
 name = "semihosting"
 version = "0.1.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
