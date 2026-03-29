@@ -10,13 +10,11 @@ env:
   WASM_PACK_VERSION: "0.14.0"
 
 jobs:
-  deploy:
-    name: Deploy Web Tools
+  build:
+    name: Build Web Tools
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      deployments: write
-      pull-requests: write
     steps:
       - uses: actions/checkout@v5
       - uses: Swatinem/rust-cache@v2
@@ -44,33 +42,45 @@ jobs:
       - run: pnpm run build
         working-directory: apps/web-tools
 
-      - name: Set deploy metadata
-        if: github.actor != 'dependabot[bot]'
-        id: meta
-        run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            echo "environment=Production" >> "$GITHUB_OUTPUT"
-            echo "url=https://web-tools.ossm.rs" >> "$GITHUB_OUTPUT"
-            echo "transient=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "environment=Preview (PR #${{ github.event.pull_request.number }})" >> "$GITHUB_OUTPUT"
-            echo "url=https://pr-${{ github.event.pull_request.number }}-web-tools.ossm-rs.workers.dev" >> "$GITHUB_OUTPUT"
-            echo "transient=true" >> "$GITHUB_OUTPUT"
-          fi
+      - name: Upload build output
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-tools-dist
+          path: apps/web-tools/dist
+
+  deploy:
+    name: Deploy
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: apps/web-tools/.nvmrc
+
+      - name: Download build output
+        uses: actions/download-artifact@v4
+        with:
+          name: web-tools-dist
+          path: apps/web-tools/dist
 
       - name: Create GitHub deployment
-        if: github.actor != 'dependabot[bot]'
         id: deployment
         uses: chrnorm/deployment-action@v2
         with:
           token: ${{ github.token }}
-          environment: ${{ steps.meta.outputs.environment }}
-          environment-url: ${{ steps.meta.outputs.url }}
-          transient-environment: ${{ steps.meta.outputs.transient }}
+          environment: Production
+          environment-url: https://web-tools.ossm.rs
 
-      - name: Deploy to production
-        if: github.event_name == 'push'
-        uses: cloudflare/wrangler-action@v3
+      - uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -78,48 +88,19 @@ jobs:
           command: deploy
           workingDirectory: apps/web-tools
 
-      - name: Deploy PR preview
-        if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          wranglerVersion: "4"
-          command: versions upload --env="" --preview-alias pr-${{ github.event.pull_request.number }}
-          workingDirectory: apps/web-tools
-
       - name: Update deployment status (success)
-        if: success() && steps.deployment.outputs.deployment_id
+        if: success()
         uses: chrnorm/deployment-status@v2
         with:
           token: ${{ github.token }}
           state: success
           deployment-id: ${{ steps.deployment.outputs.deployment_id }}
-          environment-url: ${{ steps.meta.outputs.url }}
+          environment-url: https://web-tools.ossm.rs
 
       - name: Update deployment status (failure)
-        if: failure() && steps.deployment.outputs.deployment_id
+        if: failure()
         uses: chrnorm/deployment-status@v2
         with:
           token: ${{ github.token }}
           state: failure
           deployment-id: ${{ steps.deployment.outputs.deployment_id }}
-
-      - name: Get deploy timestamp
-        if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
-        id: timestamp
-        run: echo "time=$(date -u +'%b %d, %Y at %H:%M UTC')" >> "$GITHUB_OUTPUT"
-
-      - name: Comment preview URL on PR
-        if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
-        uses: marocchino/sticky-pull-request-comment@v2
-        with:
-          header: cloudflare-preview
-          message: |
-            ## Web Tools Preview
-
-            Preview deployment for this PR is ready.
-
-            https://pr-${{ github.event.pull_request.number }}-web-tools.ossm-rs.workers.dev
-
-            <sub>Deployed on ${{ steps.timestamp.outputs.time }}</sub>
