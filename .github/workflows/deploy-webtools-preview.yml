@@ -1,0 +1,97 @@
+name: Deploy Web Tools Preview
+
+on:
+  workflow_run:
+    workflows: [Deploy Web Tools]
+    types: [completed]
+
+jobs:
+  deploy-preview:
+    name: Deploy PR preview
+    if: >-
+      github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+      pull-requests: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: apps/web-tools/.nvmrc
+
+      - name: Get PR info
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          PR=$(gh pr list --head "${{ github.event.workflow_run.head_branch }}" --json number --jq '.[0].number')
+          echo "number=$PR" >> "$GITHUB_OUTPUT"
+
+      - name: Download build output
+        uses: actions/download-artifact@v4
+        with:
+          name: web-tools-dist
+          path: apps/web-tools/dist
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Create GitHub deployment
+        id: deployment
+        uses: chrnorm/deployment-action@v2
+        with:
+          token: ${{ github.token }}
+          environment: "Preview (PR #${{ steps.pr.outputs.number }})"
+          environment-url: https://pr-${{ steps.pr.outputs.number }}-web-tools.ossm-rs.workers.dev
+          transient-environment: true
+
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: "4"
+          command: versions upload --env="" --preview-alias pr-${{ steps.pr.outputs.number }}
+          workingDirectory: apps/web-tools
+
+      - name: Update deployment status (success)
+        if: success()
+        uses: chrnorm/deployment-status@v2
+        with:
+          token: ${{ github.token }}
+          state: success
+          deployment-id: ${{ steps.deployment.outputs.deployment_id }}
+          environment-url: https://pr-${{ steps.pr.outputs.number }}-web-tools.ossm-rs.workers.dev
+
+      - name: Update deployment status (failure)
+        if: failure()
+        uses: chrnorm/deployment-status@v2
+        with:
+          token: ${{ github.token }}
+          state: failure
+          deployment-id: ${{ steps.deployment.outputs.deployment_id }}
+
+      - name: Get deploy timestamp
+        id: timestamp
+        run: echo "time=$(date -u +'%b %d, %Y at %H:%M UTC')" >> "$GITHUB_OUTPUT"
+
+      - name: Comment preview URL on PR
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: cloudflare-preview
+          number: ${{ steps.pr.outputs.number }}
+          message: |
+            ## Web Tools Preview
+
+            Preview deployment for this PR is ready.
+
+            https://pr-${{ steps.pr.outputs.number }}-web-tools.ossm-rs.workers.dev
+
+            <sub>Deployed on ${{ steps.timestamp.outputs.time }}</sub>
