@@ -37,6 +37,8 @@ impl Simulator {
             web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(line));
         });
 
+        ossm::build_info!();
+
         let update_interval_secs = update_interval_ms / 1000.0;
         let motor = SimMotor::new(&MOTOR_POSITION);
         let board = SimBoard::new(motor, &MECHANICAL);

@@ -7,6 +7,10 @@ on:
         description: Upload firmware binaries as artifacts
         type: boolean
         default: false
+      release-id:
+        description: Release identifier baked into the firmware image (e.g. tag or PR number)
+        type: string
+        default: dev
 
 env:
   CARGO_TERM_COLOR: always
@@ -36,6 +40,8 @@ jobs:
 
       - name: Build ${{ matrix.firmware }}
         run: just build-${{ matrix.firmware }}
+        env:
+          OSSM_RELEASE_ID: ${{ inputs.release-id }}
 
       - name: Install espflash
         run: |
@@ -70,3 +76,5 @@ jobs:
 
       - name: Build WASM
         run: wasm-pack build firmware/sim-wasm --target web
+        env:
+          OSSM_RELEASE_ID: ${{ inputs.release-id }}

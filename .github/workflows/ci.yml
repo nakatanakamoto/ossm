@@ -31,6 +31,7 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       upload-artifacts: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/main' }}
+      release-id: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'main' }}
 
   build-windows:
     uses: ./.github/workflows/build-windows.yml
