@@ -180,6 +180,7 @@ impl PatternEngine {
 
     pub fn stop(&self) {
         let _ = self.channels.commands.try_send(EngineCommand::Stop);
+        self.input.sender().send(PatternInput::DEFAULT);
     }
 
     pub fn home(&self) {
@@ -248,23 +249,37 @@ impl<const N: usize> PatternEngineRunner<N> {
                         continue;
                     }
 
-                    let result =
-                        select::select(ossm.home(), self.engine.channels.commands.receive()).await;
+                    let home_fut = ossm.home();
+                    let mut home_fut = core::pin::pin!(home_fut);
 
-                    match result {
-                        Either::First(resp) => {
-                            if resp != StateResponse::Completed {
-                                log::error!("Home failed, returning to idle");
+                    loop {
+                        let result = select::select(
+                            home_fut.as_mut(),
+                            self.engine.channels.commands.receive(),
+                        )
+                        .await;
+
+                        match result {
+                            Either::First(resp) => {
+                                if resp != StateResponse::Completed {
+                                    log::error!("Home failed, returning to idle");
+                                    self.set_state(RunnerState::Idle);
+                                } else {
+                                    match maybe_idx {
+                                        Some(idx) => self.set_state(RunnerState::Playing(idx)),
+                                        None => self.set_state(RunnerState::Ready),
+                                    }
+                                }
+                                break;
+                            }
+                            Either::Second(EngineCommand::Stop) => {
+                                if ossm.disable().await == StateResponse::Fault {
+                                    log::error!("Board fault during disable");
+                                }
                                 self.set_state(RunnerState::Idle);
-                                continue;
+                                break;
                             }
-                            match maybe_idx {
-                                Some(idx) => self.set_state(RunnerState::Playing(idx)),
-                                None => self.set_state(RunnerState::Ready),
-                            }
-                        }
-                        Either::Second(cmd) => {
-                            self.handle_command(cmd).await;
+                            Either::Second(_) => {}
                         }
                     }
                 }
@@ -367,11 +382,13 @@ impl<const N: usize> PatternEngineRunner<N> {
         match cmd {
             EngineCommand::Play(idx) => {
                 if idx < N {
-                    let next = match self.state {
-                        RunnerState::Idle => RunnerState::Homing(Some(idx)),
-                        _ => RunnerState::Playing(idx),
+                    match self.state {
+                        RunnerState::Idle => self.set_state(RunnerState::Homing(Some(idx))),
+                        RunnerState::Homing(_) => {
+                            log::warn!("Ignoring Play command while homing");
+                        }
+                        _ => self.set_state(RunnerState::Playing(idx)),
                     };
-                    self.set_state(next);
                 }
             }
             EngineCommand::Stop => {

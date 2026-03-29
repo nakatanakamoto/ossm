@@ -140,7 +140,7 @@ pub async fn ble_events_task(
     .unwrap();
 
     loop {
-        match advertise("OSSM", &mut peripheral).await {
+        match advertise("OSSM-rs", &mut peripheral).await {
             Ok(connection) => {
                 CONNECTED.store(true, Ordering::Release);
                 info!("BLE Connected");
@@ -197,8 +197,8 @@ pub async fn ble_events_task(
                     },
                 }
 
-                let state = engine.state();
-                info!("BLE session ended, engine state: {:?}", state);
+                engine.stop();
+                info!("BLE session ended, stopping engine");
             }
             Err(err) => {
                 error!("[adv] error: {:?}", err);
@@ -247,7 +247,7 @@ async fn gatt_events_task<P: PacketPool>(
                         write = true;
                         event_handle = event.handle();
                     }
-                    _ => {}
+                    GattEvent::Other(_) => {}
                 };
                 // This step is also performed at drop(), but writing it explicitly is necessary
                 // in order to ensure reply is sent.
@@ -284,7 +284,10 @@ async fn gatt_events_task<P: PacketPool>(
                     }
                 }
             }
-            _ => {} // ignore other Gatt Connection Events
+            GattConnectionEvent::PhyUpdated { .. }
+            | GattConnectionEvent::ConnectionParamsUpdated { .. }
+            | GattConnectionEvent::RequestConnectionParams { .. }
+            | GattConnectionEvent::DataLengthUpdated { .. } => {}
         }
     };
     CONNECTED.store(false, Ordering::Release);
@@ -458,7 +461,7 @@ fn process_command(
                 }
                 "go" => match action {
                     "simplePenetration" => engine.play(0),
-                    "strokeEngine" => engine.home(),
+                    "strokeEngine" => engine.play(0),
                     "menu" => engine.stop(),
                     _ => {
                         error!("Unknown go action: {}", action);

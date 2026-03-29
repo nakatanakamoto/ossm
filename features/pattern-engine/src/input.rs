@@ -18,7 +18,7 @@ impl PatternInput {
     pub const DEFAULT: Self = Self {
         depth: 0.5,
         stroke: 0.5,
-        velocity: 0.5,
+        velocity: 0.0,
         sensation: 0.0,
     };
 }
