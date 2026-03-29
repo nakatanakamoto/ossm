@@ -9,7 +9,7 @@ use embassy_time::{Duration, Instant, Ticker};
 use esp_radio::esp_now::{
     BROADCAST_ADDRESS, EspNowManager, EspNowReceiver, EspNowSender, PeerInfo,
 };
-use log::{error, info, trace};
+use log::{error, info};
 use pattern_engine::PatternEngine;
 use portable_atomic::{AtomicU32, AtomicU64};
 use zerocopy::{Immutable, IntoBytes, KnownLayout, TryFromBytes};
@@ -224,19 +224,6 @@ async fn receiver_task(
         };
 
         match packet.command {
-            M5Command::Speed
-            | M5Command::Depth
-            | M5Command::Stroke
-            | M5Command::Sensation
-            | M5Command::Heartbeat => {
-                trace!("M5 packet: {:?}", packet);
-            }
-            _ => {
-                info!("M5 packet: {:?}", packet);
-            }
-        }
-
-        match packet.command {
             M5Command::On => {
                 let ack = M5Packet {
                     target: M5_ID,
@@ -380,10 +367,9 @@ async fn heartbeat_check_task(engine: &'static PatternEngine) {
 
         if was_connected && !is_connected {
             info!("Remote disconnected, heartbeat lost");
-            engine.stop();
+            engine.pause();
         } else if !was_connected && is_connected {
-            info!("Remote connected, homing...");
-            engine.home();
+            info!("Remote connected");
         }
     }
 }

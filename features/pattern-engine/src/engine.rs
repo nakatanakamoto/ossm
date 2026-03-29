@@ -272,7 +272,9 @@ impl<const N: usize> PatternEngineRunner<N> {
                                 }
                                 break;
                             }
-                            Either::Second(EngineCommand::Stop) => {
+                            Either::Second(
+                                EngineCommand::Stop | EngineCommand::Pause,
+                            ) => {
                                 if ossm.disable().await == StateResponse::Fault {
                                     log::error!("Board fault during disable");
                                 }
