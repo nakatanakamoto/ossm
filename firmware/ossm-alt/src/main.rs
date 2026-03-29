@@ -7,181 +7,52 @@
 )]
 #![deny(clippy::large_stack_frames)]
 
-use embassy_executor::Spawner;
-use embassy_sync::blocking_mutex::raw::{CriticalSectionRawMutex, NoopRawMutex};
-use embassy_sync::mutex::Mutex;
-use embassy_sync::signal::Signal;
-use embassy_time::Delay;
-use embassy_time::{Duration, Ticker};
-use esp_hal::{
-    Blocking,
-    gpio::{Level, Output, OutputConfig},
-    interrupt::{Priority, software::SoftwareInterruptControl},
-    system::Stack,
-    timer::timg::TimerGroup,
-    uart::{Config, Uart},
-};
-use esp_radio::ble::controller::BleConnector;
-use esp_radio::esp_now::{EspNowManager, EspNowSender};
-use esp_rtos::embassy::InterruptExecutor;
-use log::info;
-use m57aim_motor::{Modbus, Motor57AIM, Motor57AIMConfig};
-use ossm::{MechanicalConfig, MotionController, MotionLimits, Ossm};
-
-use rs485_board::{Rs485Board, Rs485, Rs485ModbusTransport};
-use ossm_m5_remote::RemoteConfig;
-
-use pattern_engine::{AnyPattern, PatternEngine};
-use static_cell::StaticCell;
-
-use {esp_backtrace as _, esp_println as _};
+use log::LevelFilter;
 
 extern crate alloc;
 
+use {esp_backtrace as _, esp_println as _};
+
 esp_bootloader_esp_idf::esp_app_desc!();
 
-const UPDATE_INTERVAL_SECS: f64 = 0.01;
-const MOTOR_BAUD_RATE: u32 = 115_200;
-const DEVICE_ADDR: u8 = 0x01;
-
-macro_rules! mk_static {
-    ($t:ty, $val:expr) => {{
-        static STATIC_CELL: StaticCell<$t> = StaticCell::new();
-        STATIC_CELL.init($val)
-    }};
-}
-
-type ConcreteTransport =
-    Rs485ModbusTransport<Rs485<Uart<'static, Blocking>, Output<'static>>, Delay>;
-type ConcreteMotor = Motor57AIM<Modbus<ConcreteTransport>, Delay>;
-type ConcreteBoard = Rs485Board<ConcreteMotor>;
-
-static OSSM: Ossm = Ossm::new();
-static PATTERNS: PatternEngine = PatternEngine::new(&OSSM);
-
-static EXECUTOR_CORE_1: StaticCell<InterruptExecutor<2>> = StaticCell::new();
-static APP_CORE_STACK: StaticCell<Stack<16384>> = StaticCell::new();
-static MOTION_READY: Signal<CriticalSectionRawMutex, bool> = Signal::new();
-
-#[embassy_executor::task]
-async fn motion_task(mut controller: MotionController<'static, ConcreteBoard>) {
-    let interval_us = (UPDATE_INTERVAL_SECS * 1_000_000.0) as u64;
-    let mut ticker = Ticker::every(Duration::from_micros(interval_us));
-
-    loop {
-        if let Err(e) = controller.update().await {
-            log::error!("Motion controller fault: {:?}", e);
-        }
-        ticker.next().await;
-    }
-}
+ossm_esp::define_motion_task!();
 
 #[esp_rtos::main]
-async fn main(spawner: Spawner) {
-    ossm::logging::init(log::LevelFilter::Info, |line| {
-        esp_println::println!("{}", line);
-    });
+async fn main(spawner: ossm_esp::Spawner) {
+    ossm_esp::init_logging(LevelFilter::Info);
 
     ossm::build_info!();
 
     let p = esp_hal::init(esp_hal::Config::default());
-
     esp_alloc::heap_allocator!(size: 128 * 1024);
 
-    let timg0 = TimerGroup::new(p.TIMG0);
+    let timg0 = ossm_esp::TimerGroup::new(p.TIMG0);
     esp_rtos::start(timg0.timer0);
-
-    let uart_config = Config::default().with_baudrate(MOTOR_BAUD_RATE);
-    let uart = Uart::new(p.UART1, uart_config)
-        .expect("Failed to initialize UART")
-        .with_tx(p.GPIO10)
-        .with_rx(p.GPIO12);
 
     // Manual DE control — hardware RS485 mode has inverted RTS polarity
     // on the OSSM Alt board, so we toggle a GPIO directly instead.
-    let de = Output::new(p.GPIO11, Level::Low, OutputConfig::default());
-    let rs485 = Rs485::new(uart, de);
-
-    let transport = Rs485ModbusTransport::new(rs485, Delay);
-    let motor = Motor57AIM::new(
-        Modbus::new(transport, DEVICE_ADDR),
-        Motor57AIMConfig::default(),
-        Delay,
+    let de = ossm_esp::Output::new(
+        p.GPIO11,
+        ossm_esp::Level::Low,
+        ossm_esp::OutputConfig::default(),
     );
+    let rs485 = ossm_esp::init_uart!(p, GPIO10, GPIO12, de);
 
-    static MECHANICAL: MechanicalConfig = MechanicalConfig {
-        pulley_teeth: 20,
-        belt_pitch_mm: 2.0,
-    };
-    let limits = MotionLimits::default();
+    let limits = ossm_esp::MotionLimits::default();
+    let motor = ossm_esp::build_motor(rs485);
+    let controller = ossm_esp::build_controller(motor, &limits);
 
-    let board = Rs485Board::new(motor, &MECHANICAL);
-    let controller = OSSM.controller(board, limits.clone(), UPDATE_INTERVAL_SECS);
+    ossm_esp::run_on_core1!(p.SW_INTERRUPT, p.CPU_CTRL, |spawner| {
+        ossm_esp::launch_motion_controller!(spawner, controller);
+    });
 
-    let sw_int = SoftwareInterruptControl::new(p.SW_INTERRUPT);
-    let app_core_stack = APP_CORE_STACK.init(Stack::new());
+    let radio = ossm_esp::init_radio();
 
-    // Run the motion controller interrupt on its own core at high priority
-    let second_core = move || {
-        let executor = InterruptExecutor::new(sw_int.software_interrupt2);
-        let executor = EXECUTOR_CORE_1.init(executor);
-        let spawner = executor.start(Priority::Priority2);
+    let esp_now = ossm_esp::init_esp_now(radio, p.WIFI);
+    ossm_esp::start_m5_remote(&spawner, esp_now, &limits);
 
-        spawner.spawn(motion_task(controller)).unwrap();
+    let ble = ossm_esp::init_ble(radio, p.BT);
+    ossm_esp::start_ble_remote(&spawner, ble);
 
-        MOTION_READY.signal(true);
-
-        loop {}
-    };
-
-    esp_rtos::start_second_core(
-        p.CPU_CTRL,
-        sw_int.software_interrupt0,
-        sw_int.software_interrupt1,
-        app_core_stack,
-        second_core,
-    );
-
-    MOTION_READY.wait().await;
-
-    info!(
-        "Motion task started on core 1 at {}ms interval",
-        UPDATE_INTERVAL_SECS * 1000.0
-    );
-
-    let radio = &*mk_static!(
-        esp_radio::Controller<'static>,
-        esp_radio::init().expect("Failed to initialize radio controller")
-    );
-
-    let (mut wifi_controller, interfaces) =
-        esp_radio::wifi::new(radio, p.WIFI, Default::default()).unwrap();
-    wifi_controller
-        .set_mode(esp_radio::wifi::WifiMode::Sta)
-        .unwrap();
-    wifi_controller.start().unwrap();
-
-    let esp_now = interfaces.esp_now;
-    info!("ESP-NOW version {}", esp_now.version().unwrap());
-
-    let (manager, sender, receiver) = esp_now.split();
-    let manager = mk_static!(EspNowManager<'static>, manager);
-    let sender = mk_static!(
-        Mutex::<NoopRawMutex, EspNowSender<'static>>,
-        Mutex::<NoopRawMutex, _>::new(sender)
-    );
-
-    let remote_config = RemoteConfig {
-        max_velocity_mm_s: limits.max_velocity_mm_s,
-        max_travel_mm: limits.max_position_mm - limits.min_position_mm,
-    };
-
-    ossm_m5_remote::start(&spawner, manager, sender, receiver, &PATTERNS, remote_config);
-
-    let connector = BleConnector::new(radio, p.BT, Default::default())
-        .expect("Could not create BleConnector");
-    ble_remote::start(&spawner, connector, &PATTERNS);
-
-    let mut pattern_runner = PATTERNS.runner(AnyPattern::all_builtin());
-    pattern_runner.run(Delay).await;
+    ossm_esp::run_patterns().await;
 }

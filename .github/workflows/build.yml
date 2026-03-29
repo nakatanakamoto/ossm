@@ -51,7 +51,7 @@ jobs:
           sudo mv espflash /usr/local/bin/
 
       - name: Validate firmware binary
-        run: espflash save-image --merge --chip esp32s3 --partition-table firmware/${{ matrix.firmware }}/partitions.csv target/xtensa-esp32s3-none-elf/release/${{ matrix.firmware }} ${{ matrix.firmware }}.bin
+        run: espflash save-image --merge --chip esp32s3 --partition-table common/ossm-esp-build/partitions.csv target/xtensa-esp32s3-none-elf/release/${{ matrix.firmware }} ${{ matrix.firmware }}.bin
 
       - name: Upload artifact
         if: inputs.upload-artifacts

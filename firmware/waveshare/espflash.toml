@@ -1,0 +1,2 @@
+[idf_format_args]
+partition_table = "../../common/ossm-esp-build/partitions.csv"
