@@ -23,6 +23,16 @@ build-waveshare:
 flash-waveshare:
     cargo +esp run --release
 
+# Seeed Studio XIAO ESP32-S3
+[working-directory: 'firmware/seeed-xiao']
+build-seeed-xiao:
+    cargo +esp build --release
+
+[working-directory: 'firmware/seeed-xiao']
+flash-seeed-xiao:
+    cargo +esp run --release
+
+
 # WASM Simulator
 build-wasm:
     wasm-pack build firmware/sim-wasm --target web
@@ -34,7 +44,7 @@ dev-patterns: build-wasm
 
 # All
 [parallel]
-build-all: build-ossm-alt build-waveshare build-wasm
+build-all: build-ossm-alt build-waveshare build-seeed-xiao build-wasm
 
 # Check that all required tools are installed
 [unix]

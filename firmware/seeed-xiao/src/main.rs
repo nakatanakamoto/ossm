@@ -82,8 +82,6 @@ async fn main(spawner: Spawner) {
         esp_println::println!("{}", line);
     });
 
-    ossm::build_info!();
-
     let p = esp_hal::init(esp_hal::Config::default());
 
     esp_alloc::heap_allocator!(size: 128 * 1024);
@@ -94,10 +92,10 @@ async fn main(spawner: Spawner) {
     let uart_config = Config::default().with_baudrate(MOTOR_BAUD_RATE);
     let uart = Uart::new(p.UART1, uart_config)
         .expect("Failed to initialize UART")
-        .with_tx(p.GPIO17)
-        .with_rx(p.GPIO18);
+        .with_tx(p.GPIO5)
+        .with_rx(p.GPIO6);
 
-    let de = Output::new(p.GPIO21, Level::Low, OutputConfig::default());
+    let de = Output::new(p.GPIO3, Level::Low, OutputConfig::default());
     let rs485 = Rs485::new(uart, de);
 
     let transport = Rs485ModbusTransport::new(rs485, Delay);
