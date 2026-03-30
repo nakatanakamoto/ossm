@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["ossm", "drivers/*", "boards/*", "features/*", "firmware/*"]
+members = ["ossm", "drivers/*", "boards/*", "features/*"]
 
 [profile.dev]
 opt-level = "s"
@@ -8,37 +8,3 @@ opt-level = "s"
 [profile.release]
 incremental = false
 lto = 'fat'
-
-[profile.release.package.ossm-alt]
-codegen-units = 1
-debug = 2
-debug-assertions = false
-opt-level = 's'
-overflow-checks = false
-
-[profile.release.package.waveshare]
-codegen-units = 1
-debug = 2
-debug-assertions = false
-opt-level = 's'
-overflow-checks = false
-
-[profile.release.package.seeed-xiao]
-codegen-units = 1
-debug = 2
-debug-assertions = false
-opt-level = 's'
-overflow-checks = false
-
-[profile.release.package.ossm-reference]
-codegen-units = 1
-debug = 2
-debug-assertions = false
-opt-level = 's'
-overflow-checks = false
-
-
-[profile.release.package.sim-wasm]
-codegen-units = 1
-opt-level = 's'
-strip = true

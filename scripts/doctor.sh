@@ -65,6 +65,10 @@ check_esp_toolchain
 check_export_esp
 
 echo ""
+echo "Tools..."
+check jq               "needed by 'just focus' to update editor settings"
+
+echo ""
 echo "Web simulator..."
 check_nvm
 check node             "needed as the JS runtime for pnpm"
