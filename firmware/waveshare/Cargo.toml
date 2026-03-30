@@ -7,8 +7,9 @@ rust-version = "1.88"
 [dependencies]
 ossm = { path = "../../ossm" }
 pattern-engine = { path = "../../features/pattern-engine" }
-m57aim-motor = { path = "../../drivers/m57aim" }
-rs485-board = { path = "../../boards/rs485" }
+telemetry = { path = "../../features/telemetry" }
+sim-motor = { path = "../../drivers/sim-motor" }
+sim-board = { path = "../../boards/sim-board" }
 ossm-m5-remote = { path = "../../features/ossm-m5-remote", features = [
     "esp32s3",
 ] }
@@ -17,6 +18,7 @@ ble-remote = { path = "../../features/ble-remote", features = [
 ] }
 
 esp-hal = { version = "~1.0", features = ["log-04", "esp32s3", "unstable"] }
+embedded-io-async = "0.7"
 
 esp-radio = { version = "0.17.0", default-features = false, features = [
     "ble",

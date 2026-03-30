@@ -42,6 +42,13 @@ export default function Layout() {
                   </TabNav.Link>
                 )}
               </NavLink>
+              <NavLink to="/debugging">
+                {({ isActive }) => (
+                  <TabNav.Link asChild active={isActive}>
+                    <span>Debugging</span>
+                  </TabNav.Link>
+                )}
+              </NavLink>
             </TabNav.Root>
           </Flex>
           <Flex align="center" gap="2">

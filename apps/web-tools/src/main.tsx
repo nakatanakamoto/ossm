@@ -7,6 +7,7 @@ import { SimulatorProvider } from "./SimulatorProvider";
 import Layout from "./Layout";
 import FlasherPage from "./pages/FlasherPage";
 import SimulatorPage from "./pages/SimulatorPage";
+import DebuggingPage from "./pages/DebuggingPage";
 
 createRoot(document.getElementById("root")!).render(
   <BrowserRouter>
@@ -23,6 +24,7 @@ createRoot(document.getElementById("root")!).render(
               <Route path="pr/:pr" element={null} />
             </Route>
             <Route path="flasher" element={<FlasherPage />} />
+            <Route path="debugging" element={<DebuggingPage />} />
           </Route>
         </Routes>
       </SimulatorProvider>
