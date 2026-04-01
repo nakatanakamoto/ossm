@@ -64,7 +64,7 @@ jobs:
           sudo mv espflash /usr/local/bin/
 
       - name: Validate firmware binary
-        run: espflash save-image --merge --chip ${{ matrix.chip }} --partition-table firmware/${{ matrix.firmware }}/partitions.csv target/${{ matrix.target }}/release/${{ matrix.firmware }} ${{ matrix.firmware }}.bin
+        run: espflash save-image --merge --chip ${{ matrix.chip }} --partition-table firmware/${{ matrix.firmware }}/partitions.csv firmware/${{ matrix.firmware }}/target/${{ matrix.target }}/release/${{ matrix.firmware }} ${{ matrix.firmware }}.bin
 
       - name: Upload artifact
         if: inputs.upload-artifacts

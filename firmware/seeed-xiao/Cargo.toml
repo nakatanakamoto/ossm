@@ -1,3 +1,7 @@
+[workspace]
+resolver = "3"
+members = ["."]
+
 [package]
 name = "seeed-xiao"
 version = "0.1.0"
@@ -12,9 +16,7 @@ rs485-board = { path = "../../boards/rs485" }
 ossm-m5-remote = { path = "../../features/ossm-m5-remote", features = [
     "esp32s3",
 ] }
-ble-remote = { path = "../../features/ble-remote", features = [
-    "esp32s3",
-] }
+ble-remote = { path = "../../features/ble-remote", features = ["esp32s3"] }
 
 esp-hal = { version = "~1.0", features = ["log-04", "esp32s3", "unstable"] }
 
@@ -40,7 +42,7 @@ esp-bootloader-esp-idf = { version = "0.4.0", features = ["log-04", "esp32s3"] }
 log = "0.4.27"
 
 embassy-executor = { version = "0.9.1", features = ["log"] }
-embassy-time = { version = "0.5.0", features = ["log"] }
+embassy-time = { version = "0.5.1", features = ["log"] }
 esp-alloc = { version = "0.9.0" }
 esp-backtrace = { version = "0.18.1", features = [
     "println",
@@ -55,3 +57,15 @@ embassy-sync = "0.7"
 critical-section = "1.2.0"
 portable-atomic = { version = "1", default-features = false }
 static_cell = "2.1.1"
+
+[profile.dev]
+opt-level = "s"
+
+[profile.release]
+incremental = false
+lto = 'fat'
+codegen-units = 1
+debug = 2
+debug-assertions = false
+opt-level = 's'
+overflow-checks = false

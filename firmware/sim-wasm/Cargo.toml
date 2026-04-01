@@ -1,3 +1,7 @@
+[workspace]
+resolver = "3"
+members = ["."]
+
 [package]
 name = "sim-wasm"
 version = "0.1.0"
@@ -22,4 +26,9 @@ web-sys = { version = "0.3", features = ["console"] }
 
 [package.metadata.wasm-pack.profile.release]
 wasm-opt = ["-O", "--enable-bulk-memory", "--enable-nontrapping-float-to-int"]
+
+[profile.release]
+codegen-units = 1
+opt-level = 's'
+strip = true
 

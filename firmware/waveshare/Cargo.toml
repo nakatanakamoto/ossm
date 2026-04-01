@@ -1,3 +1,7 @@
+[workspace]
+resolver = "3"
+members = ["."]
+
 [package]
 name = "waveshare"
 version = "0.1.0"
@@ -55,3 +59,15 @@ embassy-sync = "0.7"
 critical-section = "1.2.0"
 portable-atomic = { version = "1", default-features = false }
 static_cell = "2.1.1"
+
+[profile.dev]
+opt-level = "s"
+
+[profile.release]
+incremental = false
+lto = 'fat'
+codegen-units = 1
+debug = 2
+debug-assertions = false
+opt-level = 's'
+overflow-checks = false
