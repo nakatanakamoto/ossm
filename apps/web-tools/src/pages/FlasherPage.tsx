@@ -211,7 +211,6 @@ export default function FlasherPage() {
       const espLoader = new ESPLoader({
         transport,
         baudrate: BAUD,
-        romBaudrate: 115200,
         terminal: espLoaderTerminal,
       });
       espLoaderRef.current = espLoader;
@@ -255,14 +254,12 @@ export default function FlasherPage() {
         throw new Error(`Download failed: ${response.status}`);
       }
       const arrayBuffer = await response.arrayBuffer();
-      const binaryStr = Array.from(new Uint8Array(arrayBuffer), (byte) =>
-        String.fromCharCode(byte),
-      ).join("");
+      const binaryData = new Uint8Array(arrayBuffer);
       appendLog(`Downloaded ${arrayBuffer.byteLength} bytes`);
 
       appendLog("Flashing...");
       await espLoader.writeFlash({
-        fileArray: [{ data: binaryStr, address: 0 }],
+        fileArray: [{ data: binaryData, address: 0 }],
         flashSize: "keep",
         flashMode: "keep",
         flashFreq: "keep",
@@ -275,8 +272,9 @@ export default function FlasherPage() {
         ) => {
           setProgress(Math.round((written / total) * 100));
         },
-        calculateMD5Hash: (image: string) => {
-          return CryptoJS.MD5(CryptoJS.enc.Latin1.parse(image)).toString();
+        calculateMD5Hash: (image: Uint8Array) => {
+          const wordArray = CryptoJS.lib.WordArray.create(image as unknown as number[]);
+          return CryptoJS.MD5(wordArray).toString();
         },
       });
 
@@ -362,8 +360,8 @@ export default function FlasherPage() {
                     rel="noopener noreferrer"
                   >
                     {prInfo.author.username}
-                  </a>
-                  {" "}opened{" "}
+                  </a>{" "}
+                  opened{" "}
                   <a
                     href={`https://github.com/ossm-rs/ossm/pull/${prNumber}`}
                     target="_blank"

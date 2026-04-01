@@ -18,7 +18,7 @@
     "@react-three/drei": "^10.0.0",
     "@react-three/fiber": "^9.0.0",
     "crypto-js": "^4.2.0",
-    "esptool-js": "^0.5.7",
+    "esptool-js": "^0.6.0",
     "hono": "^4.12.9",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
