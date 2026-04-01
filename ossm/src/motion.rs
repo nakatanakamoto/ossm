@@ -1,106 +1,57 @@
-use rsruckig::prelude::*;
-
 use crate::command::{Cancelled, MotionCommand, OssmChannels, StateCommand, StateResponse};
+use crate::planner::{MotionPlanner, PlannerState};
 use crate::{Board, MotionLimits};
 
-// Floor applied to velocity requests to prevent degenerate Ruckig inputs.
-const MIN_VELOCITY: f64 = 0.001;
-
 #[derive(Debug, Clone, Copy, PartialEq)]
-enum MotionState {
+enum BoardState {
     Disabled,
     Enabled,
     Ready,
-    Moving,
-    /// Ruckig is decelerating to a smooth stop for the given reason.
-    Stopping(StopReason),
-    /// Motor is stationary; the instructed target is preserved for resume.
-    Paused,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum StopReason {
-    Pause,
+/// What the controller should do when the planner finishes decelerating.
+#[derive(Debug, Clone, Copy)]
+enum PendingAction {
     Disable,
     Home,
 }
 
-/// The last-commanded motion intent, independent of what ruckig is currently
-/// planning. Pause/resume manipulates the ruckig input while leaving this
-/// untouched.
-#[derive(Debug, Clone, Copy)]
-struct MotionTarget {
-    /// Target position (mm).
-    position: f64,
-    /// Maximum velocity (mm/s).
-    velocity: f64,
-    /// Torque limit as a fraction (0.0–1.0). `None` uses the motor default.
-    torque: Option<f64>,
-}
-
-/// Drives the motion state machine and enforces safe motion profiles.
-///
-/// The controller owns a ruckig instance and generates jerk-limited
-/// trajectories. Each tick, it samples the trajectory and calls
-/// `board.set_position(mm)` with the next point on the curve. The board
-/// is a dumb position follower — it never plans its own trajectory.
-///
-/// # Safety
-///
-/// Ruckig enforces the acceleration and jerk limits from [`MotionLimits`].
-/// No upstream code (patterns, UI, remote) can cause motion that exceeds
-/// these limits. The motor's internal trajectory planner is bypassed by
-/// configuring it for maximum tracking speed.
 pub struct MotionController<'a, B: Board> {
     board: B,
     channels: &'a OssmChannels,
-    state: MotionState,
+    board_state: BoardState,
     limits: MotionLimits,
-    /// The last-instructed motion target. `Some` when a move has been commanded,
-    /// `None` when there is no active motion intent (e.g. disabled, just homed).
-    target: Option<MotionTarget>,
-    ruckig: Ruckig<1, ThrowErrorHandler>,
-    input: InputParameter<1>,
-    output: OutputParameter<1>,
+    planner: MotionPlanner,
+    torque: Option<f64>,
+    pending_action: Option<PendingAction>,
 }
 
 impl<'a, B: Board> MotionController<'a, B> {
-    /// Create a new `MotionController` in the `Disabled` state.
-    ///
-    /// `update_interval_secs` must match the ticker period the caller uses.
-    /// Ruckig uses this as its fixed time step, so timing accuracy matters.
     pub(crate) fn new(
         board: B,
         limits: MotionLimits,
         update_interval_secs: f64,
         channels: &'a OssmChannels,
     ) -> Self {
-        let mut input = InputParameter::new(None);
-        input.current_position[0] = limits.min_position_mm;
-        input.target_position[0] = limits.min_position_mm;
-        input.max_velocity[0] = MIN_VELOCITY;
-        input.max_acceleration[0] = limits.max_acceleration_mm_s2;
-        input.max_jerk[0] = limits.max_jerk_mm_s3;
-        input.synchronization = Synchronization::None;
-        input.duration_discretization = DurationDiscretization::Discrete;
+        let range = limits.max_position_mm - limits.min_position_mm;
+        let planner = MotionPlanner::new(
+            limits.max_velocity_mm_s / range,
+            limits.max_acceleration_mm_s2 / range,
+            limits.max_jerk_mm_s3 / range,
+            update_interval_secs,
+        );
 
         Self {
             board,
             channels,
-            state: MotionState::Disabled,
+            board_state: BoardState::Disabled,
             limits,
-            target: None,
-            ruckig: Ruckig::<1, ThrowErrorHandler>::new(None, update_interval_secs),
-            input,
-            output: OutputParameter::new(None),
+            planner,
+            torque: None,
+            pending_action: None,
         }
     }
 
-    /// Advance the motion control loop by one step.
-    ///
-    /// Returns `Err` if the board reports a critical fault. The caller should
-    /// treat this as an unrecoverable error for this control cycle — the
-    /// controller will have already transitioned to `Disabled`.
     pub async fn update(&mut self) -> Result<(), B::Error> {
         if let Err(e) = self.board.tick().await {
             log::error!("Board tick fault: {:?}", e);
@@ -122,43 +73,57 @@ impl<'a, B: Board> MotionController<'a, B> {
     }
 
     async fn process_state_command(&mut self, cmd: StateCommand) -> Result<(), B::Error> {
-        match (&self.state, cmd) {
-            (MotionState::Disabled, StateCommand::Enable) => match self.board.enable().await {
-                Ok(()) => {
-                    self.state = MotionState::Enabled;
+        if self.board_state == BoardState::Disabled {
+            return match cmd {
+                StateCommand::Enable => match self.board.enable().await {
+                    Ok(()) => {
+                        self.board_state = BoardState::Enabled;
+                        self.respond(StateResponse::Completed);
+                        Ok(())
+                    }
+                    Err(e) => {
+                        log::error!("Board enable failed: {:?}", e);
+                        self.respond(StateResponse::Fault);
+                        Err(e)
+                    }
+                },
+                StateCommand::Disable => {
                     self.respond(StateResponse::Completed);
+                    Ok(())
                 }
-                Err(e) => {
-                    log::error!("Board enable failed: {:?}", e);
-                    self.respond(StateResponse::Fault);
-                    return Err(e);
+                _ => {
+                    self.respond(StateResponse::InvalidTransition);
+                    Ok(())
                 }
-            },
-            // Idempotent: already in the target state, nothing to do.
-            // BLE remote RADR thrashes sometimes causing the catch-all
-            // to trigger.
-            (MotionState::Enabled, StateCommand::Enable)
-            | (MotionState::Disabled, StateCommand::Disable) => {
+            };
+        }
+
+        match (self.planner.state(), cmd) {
+            (_, StateCommand::Enable) => {
                 self.respond(StateResponse::Completed);
-            }
-            (MotionState::Enabled | MotionState::Ready, StateCommand::Disable) => {
-                self.disable().await;
-                self.respond(StateResponse::Completed);
-            }
-            (MotionState::Paused, StateCommand::Disable) => {
-                self.channels.move_resp.signal(Err(Cancelled));
-                self.disable().await;
-                self.respond(StateResponse::Completed);
-            }
-            (MotionState::Moving, StateCommand::Disable) => {
-                self.channels.move_resp.signal(Err(Cancelled));
-                self.stop(StopReason::Disable);
-            }
-            (MotionState::Stopping(_), StateCommand::Disable) => {
-                self.state = MotionState::Stopping(StopReason::Disable);
             }
 
-            (MotionState::Enabled | MotionState::Ready, StateCommand::Home) => {
+            (PlannerState::Idle, StateCommand::Disable) => {
+                self.disable().await;
+                self.respond(StateResponse::Completed);
+            }
+            (PlannerState::Paused, StateCommand::Disable) => {
+                self.channels.move_resp.signal(Err(Cancelled));
+                self.planner.reset();
+                self.disable().await;
+                self.respond(StateResponse::Completed);
+            }
+            (PlannerState::Moving, StateCommand::Disable) => {
+                self.channels.move_resp.signal(Err(Cancelled));
+                self.pending_action = Some(PendingAction::Disable);
+                self.planner.stop(false);
+            }
+            (PlannerState::Stopping { .. }, StateCommand::Disable) => {
+                self.pending_action = Some(PendingAction::Disable);
+                self.planner.stop(false);
+            }
+
+            (PlannerState::Idle, StateCommand::Home) => {
                 match self.home().await {
                     Ok(()) => self.respond(StateResponse::Completed),
                     Err(e) => {
@@ -167,11 +132,12 @@ impl<'a, B: Board> MotionController<'a, B> {
                     }
                 }
             }
-            (MotionState::Moving, StateCommand::Home) => {
+            (PlannerState::Moving, StateCommand::Home) => {
                 self.channels.move_resp.signal(Err(Cancelled));
-                self.stop(StopReason::Home);
+                self.pending_action = Some(PendingAction::Home);
+                self.planner.stop(false);
             }
-            (MotionState::Paused, StateCommand::Home) => {
+            (PlannerState::Paused, StateCommand::Home) => {
                 self.channels.move_resp.signal(Err(Cancelled));
                 match self.home().await {
                     Ok(()) => self.respond(StateResponse::Completed),
@@ -182,13 +148,14 @@ impl<'a, B: Board> MotionController<'a, B> {
                 }
             }
 
-            (MotionState::Moving, StateCommand::Pause) => {
-                self.stop(StopReason::Pause);
+            (PlannerState::Moving, StateCommand::Pause) => {
+                self.planner.stop(true);
                 self.respond(StateResponse::Completed);
             }
 
-            (MotionState::Paused, StateCommand::Resume) => {
-                self.resume().await;
+            (PlannerState::Paused, StateCommand::Resume) => {
+                self.planner.resume();
+                self.apply_torque().await;
                 self.respond(StateResponse::Completed);
             }
 
@@ -201,182 +168,125 @@ impl<'a, B: Board> MotionController<'a, B> {
     }
 
     async fn process_move_command(&mut self, cmd: MotionCommand) {
-        match self.state {
-            MotionState::Ready => {
-                self.set_motion_target(cmd);
-                self.apply_torque().await;
-                self.state = MotionState::Moving;
-            }
-
-            MotionState::Moving => {
-                self.set_motion_target(cmd);
-                self.apply_torque().await;
-            }
-
-            _ => {}
+        if self.board_state != BoardState::Ready
+            || !matches!(self.planner.state(), PlannerState::Idle | PlannerState::Moving)
+        {
+            return;
         }
+
+        self.planner.set_target(cmd.position, cmd.speed);
+        self.torque = cmd.torque;
+        self.apply_torque().await;
     }
 
-    /// Sample the ruckig trajectory and send the position to the board.
     async fn tick(&mut self) -> Result<(), B::Error> {
-        if !matches!(self.state, MotionState::Moving | MotionState::Stopping(_)) {
-            return Ok(());
-        }
-
-        let Ok(result) = self.ruckig.update(&self.input, &mut self.output) else {
-            return Ok(());
-        };
-
-        if !matches!(result, RuckigResult::Working | RuckigResult::Finished) {
-            return Ok(());
-        }
-
-        let mm = self.output.new_position[0]
-            .clamp(self.limits.min_position_mm, self.limits.max_position_mm);
-        if let Err(e) = self.board.set_position(mm).await {
-            log::error!("Board set_position failed: {:?}", e);
-        }
-        self.output.pass_to_input(&mut self.input);
-
-        if result == RuckigResult::Finished {
-            match self.state {
-                MotionState::Stopping(StopReason::Pause) => {
-                    self.state = MotionState::Paused;
-                }
-                MotionState::Stopping(StopReason::Disable) => {
-                    self.disable().await;
-                    self.respond(StateResponse::Completed);
-                }
-                MotionState::Stopping(StopReason::Home) => match self.home().await {
-                    Ok(()) => self.respond(StateResponse::Completed),
-                    Err(e) => {
-                        self.respond(StateResponse::Fault);
-                        return Err(e);
-                    }
-                },
-                _ => {
-                    self.target = None;
-                    self.state = MotionState::Ready;
-                    self.channels.move_resp.signal(Ok(()));
-                }
+        let prev = self.planner.state();
+        if let Some(out) = self.planner.step() {
+            let range = self.limits.max_position_mm - self.limits.min_position_mm;
+            let mm = self.limits.min_position_mm + out.position * range;
+            if let Err(e) = self.board.set_position(mm).await {
+                log::error!("Board set_position failed: {:?}", e);
             }
+        }
+        let curr = self.planner.state();
+
+        if prev != curr {
+            self.on_transition(prev, curr).await?;
         }
 
         Ok(())
     }
 
-    /// Run the homing sequence. Transitions to `Ready` on success, stays
-    /// `Disabled` on failure.
-    async fn home(&mut self) -> Result<(), B::Error> {
-        self.state = MotionState::Disabled;
+    async fn on_transition(
+        &mut self,
+        from: PlannerState,
+        to: PlannerState,
+    ) -> Result<(), B::Error> {
+        match (from, to) {
+            (PlannerState::Stopping { .. }, PlannerState::Idle) => {
+                match self.pending_action.take() {
+                    Some(PendingAction::Disable) => {
+                        self.disable().await;
+                        self.respond(StateResponse::Completed);
+                    }
+                    Some(PendingAction::Home) => {
+                        match self.home().await {
+                            Ok(()) => self.respond(StateResponse::Completed),
+                            Err(e) => {
+                                self.respond(StateResponse::Fault);
+                                return Err(e);
+                            }
+                        }
+                    }
+                    None => {
+                        self.channels.move_resp.signal(Ok(()));
+                    }
+                }
+            }
+            (PlannerState::Moving, PlannerState::Idle) => {
+                self.channels.move_resp.signal(Ok(()));
+            }
+            _ => {}
+        }
+        Ok(())
+    }
 
+    async fn home(&mut self) -> Result<(), B::Error> {
         if let Err(e) = self.board.home().await {
             log::error!("Board home failed: {:?}", e);
             return Err(e);
         }
 
-        self.input.control_interface = ControlInterface::Position;
-        self.input.current_position[0] = self.limits.min_position_mm;
-        self.input.target_position[0] = self.limits.min_position_mm;
-        self.input.current_velocity[0] = 0.0;
-        self.input.current_acceleration[0] = 0.0;
+        self.planner.home();
 
-        if let Err(e) = self.board.set_position(self.limits.min_position_mm).await {
+        if let Err(e) = self
+            .board
+            .set_position(self.limits.min_position_mm)
+            .await
+        {
             log::error!("Board set_position after home failed: {:?}", e);
             return Err(e);
         }
 
-        self.target = None;
-        self.state = MotionState::Ready;
+        self.board_state = BoardState::Ready;
         Ok(())
     }
 
-    /// Best-effort disable. Logs errors but always transitions to `Disabled`,
-    /// because there is no useful recovery if the motor won't turn off.
     async fn disable(&mut self) {
         if let Err(e) = self.board.disable().await {
             log::error!("Board disable failed: {:?}", e);
         }
-        self.input.control_interface = ControlInterface::Position;
-        self.target = None;
-        self.state = MotionState::Disabled;
+        self.planner.reset();
+        self.pending_action = None;
+        self.board_state = BoardState::Disabled;
     }
 
-    fn stop(&mut self, reason: StopReason) {
-        // Switch to velocity control and target zero velocity. Ruckig handles
-        // the jerk-limited deceleration trajectory — no manual math needed.
-        self.input.control_interface = ControlInterface::Velocity;
-        self.input.target_velocity[0] = 0.0;
-        self.output.time = 0.0;
-        self.state = MotionState::Stopping(reason);
-    }
-
-    async fn resume(&mut self) {
-        // Switch back to position control and restore the instructed target.
-        self.input.control_interface = ControlInterface::Position;
-        self.sync_ruckig();
-        self.apply_torque().await;
-        self.state = MotionState::Moving;
-    }
-
-    /// Cancel any in-flight motion and transition to `Disabled`.
-    ///
-    /// Called when `board.tick()` reports a critical fault. Signals appropriate
-    /// responses on the channels so callers aren't left waiting.
     fn enter_fault(&mut self) {
-        match self.state {
-            MotionState::Moving | MotionState::Paused => {
+        match self.planner.state() {
+            PlannerState::Moving | PlannerState::Paused => {
                 self.channels.move_resp.signal(Err(Cancelled));
             }
-            MotionState::Stopping(StopReason::Pause) => {
+            PlannerState::Stopping { preserve_target: true } => {
                 self.channels.move_resp.signal(Err(Cancelled));
             }
-            MotionState::Stopping(StopReason::Disable | StopReason::Home) => {
-                self.respond(StateResponse::Fault);
+            PlannerState::Stopping { preserve_target: false } => {
+                if self.pending_action.is_some() {
+                    self.respond(StateResponse::Fault);
+                }
             }
             _ => {}
         }
-        self.target = None;
-        self.state = MotionState::Disabled;
+        self.planner.reset();
+        self.pending_action = None;
+        self.board_state = BoardState::Disabled;
     }
 
     fn respond(&self, resp: StateResponse) {
         self.channels.state_resp.signal(resp);
     }
 
-    fn fraction_to_mm(&self, fraction: f64) -> f64 {
-        let mm = self.limits.min_position_mm
-            + fraction * (self.limits.max_position_mm - self.limits.min_position_mm);
-        mm.clamp(self.limits.min_position_mm, self.limits.max_position_mm)
-    }
-
-    fn fraction_to_velocity(&self, fraction: f64) -> f64 {
-        let mm_s = fraction * self.limits.max_velocity_mm_s;
-        mm_s.clamp(MIN_VELOCITY, self.limits.max_velocity_mm_s)
-    }
-
-    fn set_motion_target(&mut self, cmd: MotionCommand) {
-        self.target = Some(MotionTarget {
-            position: self.fraction_to_mm(cmd.position),
-            velocity: self.fraction_to_velocity(cmd.speed),
-            torque: cmd.torque,
-        });
-        self.sync_ruckig();
-    }
-
-    /// Write the instructed target into ruckig's input parameters and reset
-    /// the trajectory timer so ruckig replans.
-    fn sync_ruckig(&mut self) {
-        if let Some(target) = &self.target {
-            self.input.target_position[0] = target.position;
-            self.input.max_velocity[0] = target.velocity;
-            self.output.time = 0.0;
-            self.ruckig.reset();
-        }
-    }
-
     async fn apply_torque(&mut self) {
-        let fraction = self.target.as_ref().and_then(|t| t.torque).unwrap_or(1.0);
+        let fraction = self.torque.unwrap_or(1.0);
         if let Err(e) = self.board.set_torque(fraction).await {
             log::error!("Board set_torque failed: {:?}", e);
         }

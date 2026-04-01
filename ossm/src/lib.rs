@@ -9,6 +9,7 @@ pub mod logging;
 mod mechanical;
 mod motion;
 mod motor;
+pub(crate) mod planner;
 pub mod transport;
 
 pub use board::Board;
@@ -18,6 +19,9 @@ pub use limits::MotionLimits;
 pub use mechanical::MechanicalConfig;
 pub use motion::MotionController;
 pub use motor::{CurrentSensor, Motor, Rs485Motor, SelfHoming, StepDir};
+
+#[cfg(feature = "planner")]
+pub use planner::{MotionPlanner, PlannerState, TrajectoryStep};
 pub use transport::{
     Modbus, ModbusTransport, Rs485, Rs485ModbusTransport, StepDirConfig, StepDirError,
     StepDirMotor, StepOutput, TransportError,
@@ -93,5 +97,32 @@ impl Ossm {
     /// Wait for the current in-flight motion to complete.
     pub async fn await_motion(&self) -> Result<(), Cancelled> {
         self.channels.move_resp.wait().await
+    }
+}
+
+#[cfg(feature = "planner")]
+impl Ossm {
+    pub fn try_receive_state(&self) -> Option<StateCommand> {
+        self.channels.state_cmd.try_receive().ok()
+    }
+
+    pub fn respond_state(&self, resp: StateResponse) {
+        self.channels.state_resp.signal(resp);
+    }
+
+    pub fn try_receive_move(&self) -> Option<MotionCommand> {
+        self.channels.move_cmd.try_receive().ok()
+    }
+
+    pub fn complete_move(&self) {
+        self.channels.move_resp.signal(Ok(()));
+    }
+
+    /// Drain any stale commands and signals from a previous run.
+    pub fn drain(&self) {
+        self.channels.state_resp.reset();
+        self.channels.move_resp.reset();
+        let _ = self.channels.state_cmd.try_receive();
+        let _ = self.channels.move_cmd.try_receive();
     }
 }
