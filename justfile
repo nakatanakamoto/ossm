@@ -43,8 +43,12 @@ flash-ossm-reference:
 
 
 # WASM Simulator
+[working-directory: 'firmware/sim-wasm']
 build-wasm:
-    wasm-pack build firmware/sim-wasm --target web
+    cargo +stable build --release
+    wasm-bindgen --target web --out-dir pkg target/wasm32-unknown-unknown/release/sim_wasm.wasm
+    wasm-opt -O --all-features -o pkg/sim_wasm_bg.wasm pkg/sim_wasm_bg.wasm
+    echo '{"name":"sim-wasm","type":"module","main":"sim_wasm.js","types":"sim_wasm.d.ts"}' > pkg/package.json
 
 # Dev server (watches Rust sources and hot-reloads WASM)
 [working-directory: 'apps/web-tools']

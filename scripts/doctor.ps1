@@ -53,6 +53,18 @@ function CheckExportEsp() {
     }
 }
 
+function CheckWasmTarget() {
+    $targets = @(& rustup +stable target list --installed 2>$null)
+    if ($targets -contains "wasm32-unknown-unknown") {
+        Write-Host "  + " -ForegroundColor Green -NoNewline
+        Write-Host ("{0,-12} {1}" -f "wasm32", "wasm32-unknown-unknown target installed")
+    } else {
+        Write-Host "  x " -ForegroundColor Red -NoNewline
+        Write-Host ("{0,-12} {1}" -f "wasm32", "missing wasm32-unknown-unknown target (rustup +stable target add wasm32-unknown-unknown)")
+        $script:ok = $false
+    }
+}
+
 Write-Host "Firmware..."
 Check cargo            "needed to compile Rust crates"
 Check espup            "needed to install the ESP Rust toolchain"
@@ -64,7 +76,9 @@ Write-Host ""
 Write-Host "Web simulator..."
 Check node             "needed as the JS runtime for pnpm"
 Check pnpm             "needed to run the web simulator dev server"
-Check wasm-pack        "needed to build the WASM simulator"
+Check wasm-bindgen     "needed to build the WASM simulator (cargo install wasm-bindgen-cli)"
+Check wasm-opt         "needed to optimise WASM output (install binaryen)"
+CheckWasmTarget
 
 Write-Host ""
 if ($ok) {

@@ -42,6 +42,15 @@ check_export_esp() {
     fi
 }
 
+check_wasm_target() {
+    if rustup +stable target list --installed 2>/dev/null | grep -q wasm32-unknown-unknown; then
+        printf '  \033[32m✓\033[0m %-12s %s\n' "wasm32" "wasm32-unknown-unknown target installed"
+    else
+        printf '  \033[31m✗\033[0m %-12s %s\n' "wasm32" "missing wasm32-unknown-unknown target (rustup +stable target add wasm32-unknown-unknown)"
+        ok=false
+    fi
+}
+
 # nvm is a shell function, not a binary - check for its install directory instead
 check_nvm() {
     if [ -d "${NVM_DIR:-$HOME/.nvm}" ]; then
@@ -73,7 +82,9 @@ echo "Web simulator..."
 check_nvm
 check node             "needed as the JS runtime for pnpm"
 check pnpm             "needed to run the web simulator dev server"
-check wasm-pack        "needed to build the WASM simulator"
+check wasm-bindgen     "needed to build the WASM simulator (cargo install wasm-bindgen-cli)"
+check wasm-opt         "needed to optimise WASM output (install binaryen)"
+check_wasm_target
 
 echo ""
 if $ok; then
