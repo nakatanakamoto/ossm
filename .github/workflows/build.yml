@@ -24,7 +24,20 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        firmware: [ossm-alt, waveshare, seeed-xiao]
+        firmware: [ossm-alt, waveshare, seeed-xiao, ossm-reference]
+        include:
+          - firmware: ossm-alt
+            chip: esp32s3
+            target: xtensa-esp32s3-none-elf
+          - firmware: waveshare
+            chip: esp32s3
+            target: xtensa-esp32s3-none-elf
+          - firmware: seeed-xiao
+            chip: esp32s3
+            target: xtensa-esp32s3-none-elf
+          - firmware: ossm-reference
+            chip: esp32
+            target: xtensa-esp32-none-elf
     steps:
       - uses: actions/checkout@v5
 
@@ -51,7 +64,7 @@ jobs:
           sudo mv espflash /usr/local/bin/
 
       - name: Validate firmware binary
-        run: espflash save-image --merge --chip esp32s3 --partition-table firmware/${{ matrix.firmware }}/partitions.csv target/xtensa-esp32s3-none-elf/release/${{ matrix.firmware }} ${{ matrix.firmware }}.bin
+        run: espflash save-image --merge --chip ${{ matrix.chip }} --partition-table firmware/${{ matrix.firmware }}/partitions.csv target/${{ matrix.target }}/release/${{ matrix.firmware }} ${{ matrix.firmware }}.bin
 
       - name: Upload artifact
         if: inputs.upload-artifacts

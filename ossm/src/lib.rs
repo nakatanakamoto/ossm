@@ -17,7 +17,7 @@ use command::OssmChannels;
 pub use limits::MotionLimits;
 pub use mechanical::MechanicalConfig;
 pub use motion::MotionController;
-pub use motor::{Motor, Rs485Motor, SelfHoming, StepDir};
+pub use motor::{CurrentSensor, Motor, Rs485Motor, SelfHoming, StepDir};
 pub use transport::{
     Modbus, ModbusTransport, Rs485, Rs485ModbusTransport, StepDirConfig, StepDirError,
     StepDirMotor, StepOutput, TransportError,

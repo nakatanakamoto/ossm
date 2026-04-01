@@ -1,7 +1,9 @@
+mod current_sensor;
 mod rs485;
 mod self_homing;
 mod step_dir;
 
+pub use current_sensor::CurrentSensor;
 pub use rs485::Rs485Motor;
 pub use self_homing::SelfHoming;
 pub use step_dir::StepDir;

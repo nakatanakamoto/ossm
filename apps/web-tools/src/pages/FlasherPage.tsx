@@ -33,6 +33,7 @@ const BAUD = 921600;
 
 const BOARD_LABELS: Record<string, string> = {
   "ossm-alt": "OSSM Alt",
+  "ossm-reference": "OSSM Reference Board",
   waveshare: "Waveshare ESP32-S3-RS485-CAN",
   "seeed-xiao": "Seeed XIAO ESP32S3",
 };

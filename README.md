@@ -34,6 +34,9 @@ Boards:
 
   A cheap, compact, powerful s3 board with built in 28v USB-PD.
 
+- [OSSM Reference Board](https://github.com/KinkyMakers/OSSM-hardware) (ESP32, step/dir)
+  The original OSSM PCB with step/dir motor control and current-sensing homing.
+
 - [Industrial ESP32-S3-RS485-CAN](https://www.waveshare.com/esp32-s3-rs485-can.htm) by WaveShare
 
 - Seeed Studio's Xiao ESP32-S3
@@ -45,7 +48,7 @@ Boards:
 
 Motors:
 
-- 57AIM series motor
+- 57AIM series motor (RS485/Modbus or step/dir)
 
 ## Installing firmware
 
@@ -76,7 +79,7 @@ While every precaution has been taken to make this software as safe as possible,
 - Trait-based hardware abstraction for motors and boards
 - Optional motor telemetry (position, speed, current, voltage, temperature)
 - Fully async, lock-free architecture built on Embassy channels and signals
-- no_std compatible - runs on bare-metal embedded targets like ESP32-S3
+- no_std compatible - runs on bare-metal embedded targets like ESP32 and ESP32-S3
 
 ## Anatomy
 
@@ -145,7 +148,7 @@ Features are optional higher-level capabilities built on top of the core motion 
    espup install
    ```
 
-   This adds the `xtensa` target and the `+esp` toolchain needed to compile for ESP32-S3.
+   This adds the `xtensa` target and the `+esp` toolchain needed to compile for ESP32 and ESP32-S3.
 
 3. **Install [just](https://github.com/casey/just)** (a command runner used for build recipes):
 
@@ -175,23 +178,26 @@ Features are optional higher-level capabilities built on top of the core motion 
 5. You should now be able to build and flash:
 
    ```sh
-   just build-ossm-alt    # OSSM Alt Edition
-   just build-waveshare   # Waveshare ESP32-S3-RS485-CAN
-   just build-seeed-xiao  # Seeed Studio XIAO ESP32-S3
+   just build-ossm-alt        # OSSM Alt Edition (ESP32-S3, RS485)
+   just build-ossm-reference  # OSSM Reference Board (ESP32, step/dir)
+   just build-waveshare       # Waveshare ESP32-S3-RS485-CAN
+   just build-seeed-xiao      # Seeed Studio XIAO ESP32-S3
 
-   just flash-ossm-alt    # Build + flash OSSM Alt Edition
-   just flash-waveshare   # Build + flash Waveshare
-   just flash-seeed-xiao  # Build + flash Seeed XIAO
+   just flash-ossm-alt        # Build + flash OSSM Alt Edition
+   just flash-ossm-reference  # Build + flash OSSM Reference Board
+   just flash-waveshare       # Build + flash Waveshare
+   just flash-seeed-xiao      # Build + flash Seeed XIAO
    ```
 
 #### Configuring rust-analyzer
 
-This project targets multiple architectures (ESP32, ESP32-S3, WASM), each with its own Rust target triple and cargo features. Since rust-analyzer can only analyze one target at a time, it needs to be told which one to use - otherwise it defaults to your host platform and will report false errors for embedded or WASM code.
+This project targets multiple architectures (ESP32-S3, ESP32, WASM), each with its own Rust target triple and toolchain settings. Since rust-analyzer can only analyze one target at a time, it needs to be told which one to use - otherwise it defaults to your host platform and will report false errors for embedded or WASM code.
 
 The `just focus` command links a firmware's config tomls to the workspace root to configure the correct target and features:
 
 ```sh
 just focus ossm-alt
+just focus ossm-reference
 just focus wasm
 ```
 

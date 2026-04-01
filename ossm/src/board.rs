@@ -55,6 +55,9 @@ pub trait Board {
     /// 1. Performing the homing motion (however the hardware supports it)
     /// 2. Zeroing its internal position reference
     /// 3. Configuring the motor for maximum tracking performance afterward
+    ///
+    /// The motion controller will move the motor to `min_position_mm` after
+    /// homing completes — the board does not need to handle backoff.
     async fn home(&mut self) -> Result<(), Self::Error>;
 
     /// Command the motor to a position immediately.

@@ -32,6 +32,15 @@ build-seeed-xiao:
 flash-seeed-xiao:
     cargo +esp run --release
 
+# OSSM Reference (ESP32)
+[working-directory: 'firmware/ossm-reference']
+build-ossm-reference:
+    cargo +esp build --release
+
+[working-directory: 'firmware/ossm-reference']
+flash-ossm-reference:
+    cargo +esp run --release
+
 
 # WASM Simulator
 build-wasm:
@@ -44,7 +53,7 @@ dev-patterns: build-wasm
 
 # All
 [parallel]
-build-all: build-ossm-alt build-waveshare build-seeed-xiao build-wasm
+build-all: build-ossm-alt build-waveshare build-seeed-xiao build-ossm-reference build-wasm
 
 # Check that all required tools are installed
 [unix]
