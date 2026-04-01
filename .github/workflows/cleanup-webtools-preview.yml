@@ -1,7 +1,7 @@
 name: Cleanup Web Tools Preview
 
 on:
-  pull_request:
+  pull_request_target:
     types: [closed]
 
 jobs:
@@ -16,6 +16,7 @@ jobs:
         with:
           token: ${{ github.token }}
           environment: "Preview (PR #${{ github.event.pull_request.number }})"
+          onlyDeactivateDeployments: true
 
       - name: Delete PR firmware from R2
         env:
