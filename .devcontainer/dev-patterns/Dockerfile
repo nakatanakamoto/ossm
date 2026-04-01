@@ -20,6 +20,7 @@ RUN . "$NVM_DIR/nvm.sh" \
 ENV PATH="$NVM_DIR/current:$PATH"
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 
-# Add wasm target and install wasm-pack
+# Add wasm target and install build tools
 RUN rustup target add wasm32-unknown-unknown \
-    && curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+    && cargo install wasm-bindgen-cli \
+    && apt-get update && apt-get install -y --no-install-recommends binaryen && rm -rf /var/lib/apt/lists/*

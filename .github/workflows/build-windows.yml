@@ -5,7 +5,6 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  WASM_PACK_VERSION: "0.14.0"
   ESP_TOOLCHAIN_VERSION: "1.94.0.2"
 
 jobs:
@@ -38,12 +37,19 @@ jobs:
 
       - uses: extractions/setup-just@v2
 
-      - name: Install wasm-pack
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-bindgen-cli
+        run: cargo install wasm-bindgen-cli
+
+      - name: Install binaryen
         shell: bash
         run: |
-          curl -L https://github.com/wasm-bindgen/wasm-pack/releases/download/v${WASM_PACK_VERSION}/wasm-pack-v${WASM_PACK_VERSION}-x86_64-pc-windows-msvc.tar.gz -o wasm-pack.tar.gz
-          tar xzf wasm-pack.tar.gz
-          mv wasm-pack-v${WASM_PACK_VERSION}-x86_64-pc-windows-msvc/wasm-pack.exe "$HOME/.cargo/bin/"
+          curl -sL "https://github.com/WebAssembly/binaryen/releases/download/version_128/binaryen-version_128-x86_64-windows.tar.gz" -o binaryen.tar.gz
+          tar xzf binaryen.tar.gz
+          cp binaryen-version_128/bin/wasm-opt.exe "$CARGO_HOME/bin/"
 
       - name: Build all
         run: just build-all

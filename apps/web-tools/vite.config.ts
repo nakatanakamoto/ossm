@@ -38,8 +38,8 @@ function wasmHotReload(): Plugin {
         console.log("\x1b[36m[wasm]\x1b[0m Rebuilding...");
 
         const proc = spawn(
-          "wasm-pack",
-          ["build", "firmware/sim-wasm", "--target", "web"],
+          "just",
+          ["build-wasm"],
           { cwd: workspaceRoot, stdio: "inherit" },
         );
 

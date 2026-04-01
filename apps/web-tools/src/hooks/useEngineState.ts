@@ -1,4 +1,5 @@
 import { useRef, useCallback, useSyncExternalStore } from "react";
+import type { Simulator } from "sim-wasm";
 
 type PlaybackState = "stopped" | "homing" | "playing" | "paused";
 
@@ -9,9 +10,7 @@ const ENGINE_STATE_MAP: Record<number, PlaybackState> = {
   3: "paused",
 };
 
-export function useEngineState(
-  simulator: import("sim-wasm").Simulator,
-): PlaybackState {
+export function useEngineState(simulator: Simulator): PlaybackState {
   const stateRef = useRef<PlaybackState>("stopped");
 
   const subscribe = useCallback(

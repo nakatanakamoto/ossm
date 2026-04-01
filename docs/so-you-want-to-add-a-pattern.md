@@ -27,7 +27,8 @@ Install the following:
 | Tool                                                       | Purpose                               |
 | ---------------------------------------------------------- | ------------------------------------- |
 | [Rust](https://rustup.rs/)                                 | Compiler toolchain                    |
-| [wasm-pack](https://drager.github.io/wasm-pack/installer/) | Builds the pattern engine to WASM     |
+| [wasm-bindgen-cli](https://crates.io/crates/wasm-bindgen-cli) (`cargo install wasm-bindgen-cli`) | Generates JS bindings for the WASM module |
+| [binaryen](https://github.com/WebAssembly/binaryen) (`wasm-opt`) | Optimises the WASM output |
 | [Node.js](https://nodejs.org/en/download) (v24 LTS)        | Runs the simulator dev server         |
 | [pnpm](https://pnpm.io/installation#using-corepack)        | Package manager for the simulator app |
 | [just](https://just.systems/man/en/packages.html)          | Command runner                        |
@@ -47,7 +48,7 @@ just dev-patterns
 
 This does two things in sequence:
 
-1. **`build-wasm`** - runs `wasm-pack build firmware/sim-wasm --target web`, which compiles the pattern engine (and its WASM firmware wrapper) into a WebAssembly module.
+1. **`build-wasm`** - compiles the pattern engine (and its WASM firmware wrapper) into a WebAssembly module using `cargo build`, then generates JS bindings with `wasm-bindgen` and optimises the output with `wasm-opt`.
 2. **`dev`** - starts the Vite dev server in `apps/web-tools/` with `--host` so you can access it from other devices on your network.
 
 The simulator renders a 3D model of the OSSM and runs your patterns in the browser. Change a pattern and the wasm will recompile and the browser will reload.
