@@ -39,7 +39,7 @@
     "@types/w3c-web-serial": "^1.0.8",
     "@vitejs/plugin-react": "^5.2.0",
     "three-stdlib": "^2.36.1",
-    "typescript": "~5.9.3",
+    "typescript": "~6.0.2",
     "vite": "^8.0.3",
     "vite-plugin-top-level-await": "^1.4.0",
     "vite-plugin-wasm": "^3.6.0",
