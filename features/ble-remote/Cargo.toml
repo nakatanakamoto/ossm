@@ -16,7 +16,7 @@ esp-radio = { version = "0.17.0", default-features = false, features = [
     "unstable",
 ] }
 
-trouble-host = { version = "0.5.1", features = ["default-packet-pool-mtu-255"] }
+trouble-host = { version = "0.6.0", features = ["default-packet-pool-mtu-255"] }
 bt-hci = "0.6.0"
 
 static_cell = "2.1.1"
