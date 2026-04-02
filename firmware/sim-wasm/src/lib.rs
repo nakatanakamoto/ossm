@@ -343,8 +343,11 @@ impl PatternRecorder {
             self.max_jerk,
             timestep_ms / 1000.0,
         );
+        let rest_position = depth * (1.0 - stroke);
+        planner.set_position(rest_position);
+
         let mut was_moving = false;
-        let mut last_pos = 0.0;
+        let mut last_pos = rest_position;
 
         let waker = Waker::noop();
         let mut cx = Context::from_waker(&waker);
@@ -363,7 +366,8 @@ impl PatternRecorder {
                     }
                     StateCommand::Home => {
                         planner.home();
-                        last_pos = 0.0;
+                        planner.set_position(rest_position);
+                        last_pos = rest_position;
                         self.ossm.respond_state(StateResponse::Completed);
                     }
                     StateCommand::Pause => {

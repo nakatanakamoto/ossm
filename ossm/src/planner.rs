@@ -166,6 +166,16 @@ impl MotionPlanner {
         self.state = PlannerState::Moving;
     }
 
+    /// Set the current position without starting motion. Only valid in `Idle`.
+    pub fn set_position(&mut self, position: f64) {
+        if self.state != PlannerState::Idle || !position.is_finite() {
+            return;
+        }
+        let position = position.clamp(0.0, 1.0);
+        self.input.current_position[0] = position;
+        self.input.target_position[0] = position;
+    }
+
     /// Reset position to 0, clear target, go `Idle`.
     pub fn home(&mut self) {
         self.input.control_interface = ControlInterface::Position;

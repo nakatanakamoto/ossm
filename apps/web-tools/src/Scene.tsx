@@ -55,9 +55,11 @@ function collectGeometries(root: Object3D): BufferGeometry | null {
 function Model({
   simulator,
   onOrbitTarget,
+  overridePosition,
 }: {
   simulator: Simulator;
   onOrbitTarget?: (center: Vector3) => void;
+  overridePosition?: number | null;
 }) {
   const { scene } = useGLTF(MODEL_URL);
   const railRef = useRef<ThreeMesh>(null);
@@ -82,7 +84,7 @@ function Model({
 
   useFrame(() => {
     if (railRef.current) {
-      const pos = simulator.get_position();
+      const pos = overridePosition != null ? overridePosition : simulator.get_position();
       railRef.current.position.z = -(1 - pos) * RAIL_TRAVEL;
     }
   });
@@ -105,14 +107,25 @@ const INITIAL_CAMERA: [number, number, number] = [-0.4, 0.4, 0.4];
 const RESET_LERP_SPEED = 0.08;
 const RESET_SNAP_THRESHOLD = 0.0001;
 
+interface ViewportInsets {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+}
+
 function SceneContent({
   simulator,
   handle,
   zoom,
+  viewportInsets,
+  overridePosition,
 }: {
   simulator: Simulator;
   handle: React.Ref<SceneHandle>;
   zoom: number;
+  viewportInsets?: ViewportInsets;
+  overridePosition?: number | null;
 }) {
   const [appearance] = useAppearance();
   const controlsRef = useRef<OrbitControlsImpl>(null);
@@ -137,8 +150,33 @@ function SceneContent({
     },
   }));
 
+  const size = useThree((s) => s.size);
+
   useFrame(({ gl }) => {
     gl.toneMappingExposure = isDark ? 0.75 : 1.2;
+
+    if (viewportInsets && viewportInsets.width > 0 && viewportInsets.height > 0) {
+      const { top, left, width, height } = viewportInsets;
+      // Center of the viewport sub-region vs center of the full canvas
+      const vpCenterX = left + width / 2;
+      const vpCenterY = top + height / 2;
+      // setViewOffset's x/y is the top-left of the sub-window we want centered.
+      // To shift the projection so vpCenter becomes the visual center:
+      const offsetX = size.width / 2 - vpCenterX;
+      const offsetY = size.height / 2 - vpCenterY;
+      camera.setViewOffset(
+        size.width,
+        size.height,
+        offsetX,
+        offsetY,
+        size.width,
+        size.height,
+      );
+      camera.updateProjectionMatrix();
+    } else {
+      camera.clearViewOffset();
+      camera.updateProjectionMatrix();
+    }
 
     if (!resettingRef.current) return;
     const controls = controlsRef.current;
@@ -146,14 +184,19 @@ function SceneContent({
 
     camera.position.lerp(goalPos, RESET_LERP_SPEED);
     controls.target.lerp(goalTarget, RESET_LERP_SPEED);
+    camera.zoom += (zoom - camera.zoom) * RESET_LERP_SPEED;
+    camera.updateProjectionMatrix();
     controls.update();
 
     if (
       camera.position.distanceTo(goalPos) < RESET_SNAP_THRESHOLD &&
-      controls.target.distanceTo(goalTarget) < RESET_SNAP_THRESHOLD
+      controls.target.distanceTo(goalTarget) < RESET_SNAP_THRESHOLD &&
+      Math.abs(camera.zoom - zoom) < 0.5
     ) {
       camera.position.copy(goalPos);
       controls.target.copy(goalTarget);
+      camera.zoom = zoom;
+      camera.updateProjectionMatrix();
       controls.update();
       resettingRef.current = false;
     }
@@ -166,7 +209,7 @@ function SceneContent({
       <directionalLight position={[1, 2, 3]} intensity={isDark ? 0.8 : 1.5} />
       <directionalLight position={[-1, 1, -1]} intensity={isDark ? 0.3 : 0.5} />
       <Environment preset="studio" environmentIntensity={isDark ? 0.4 : 1} />
-      <Model simulator={simulator} onOrbitTarget={onOrbitTarget} />
+      <Model simulator={simulator} onOrbitTarget={onOrbitTarget} overridePosition={overridePosition} />
       <OrthographicCamera
         makeDefault
         position={INITIAL_CAMERA}
@@ -180,18 +223,30 @@ function SceneContent({
 }
 
 const Scene = memo(
-  forwardRef<SceneHandle, { simulator: Simulator; zoom?: number }>(
-    function Scene({ simulator, zoom = 1500 }, ref) {
-      return (
-        <Canvas
-          gl={{ toneMapping: ACESFilmicToneMapping, toneMappingExposure: 1.2 }}
-          style={{ width: "100%", height: "100%" }}
-        >
-          <SceneContent simulator={simulator} handle={ref} zoom={zoom} />
-        </Canvas>
-      );
-    },
-  ),
+  forwardRef<
+    SceneHandle,
+    {
+      simulator: Simulator;
+      zoom?: number;
+      viewportInsets?: ViewportInsets;
+      overridePosition?: number | null;
+    }
+  >(function Scene({ simulator, zoom = 1500, viewportInsets, overridePosition }, ref) {
+    return (
+      <Canvas
+        gl={{ toneMapping: ACESFilmicToneMapping, toneMappingExposure: 1.2 }}
+        style={{ width: "100%", height: "100%" }}
+      >
+        <SceneContent
+          simulator={simulator}
+          handle={ref}
+          zoom={zoom}
+          viewportInsets={viewportInsets}
+          overridePosition={overridePosition}
+        />
+      </Canvas>
+    );
+  }),
 );
 
 export default Scene;

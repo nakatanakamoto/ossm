@@ -1,103 +1,113 @@
-import { Suspense, useRef, useCallback, useEffect, useMemo } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSimulator } from "../hooks/useSimulator";
 import { useEngineState } from "../hooks/useEngineState";
 import { useIsMobile } from "../hooks/useIsMobile";
+import { useAppearance } from "../hooks/useAppearance";
 import { usePersistedState } from "../hooks/usePersistedState";
-import {
-  Box,
-  Card,
-  Flex,
-  Heading,
-  Text,
-  Slider,
-  Spinner,
-  Select,
-  Button,
-  IconButton,
-  ScrollArea,
-  Separator,
-} from "@radix-ui/themes";
-import {
-  ResetIcon,
-  PlayIcon,
-  PauseIcon,
-  StopIcon,
-} from "@radix-ui/react-icons";
+import { Box, Button, Card, Flex } from "@radix-ui/themes";
+import { PlayIcon, PauseIcon, ReloadIcon } from "@radix-ui/react-icons";
 import Scene from "../Scene";
 import type { SceneHandle } from "../Scene";
+import { Chart } from "../Chart";
+import {
+  TrajectorySidebar,
+  useTrajectoryData,
+  DEFAULTS,
+  type UnitMode,
+} from "../TrajectoryPanel";
+
+const glassStyle = {
+  pointerEvents: "auto" as const,
+  backdropFilter: "blur(12px)",
+  backgroundColor: "var(--color-panel-translucent)",
+};
 
 export default function SimulatorPage() {
   const simulator = useSimulator();
   const sceneRef = useRef<SceneHandle>(null);
-  const [depth, setDepth] = usePersistedState("ossm:depth", 0.5);
-  const [stroke, setStroke] = usePersistedState("ossm:stroke", 0.4);
-  const [velocity, setVelocity] = usePersistedState("ossm:velocity", 0.5);
-  const [sensation, setSensation] = usePersistedState("ossm:sensation", 0.0);
-  const [selectedPattern, setSelectedPattern] = usePersistedState(
-    "ossm:pattern",
-    0,
-  );
-  const playbackState = useEngineState(simulator);
   const isMobile = useIsMobile();
+  const [appearance] = useAppearance();
+  const playbackState = useEngineState(simulator);
 
+  const [pattern, setPattern] = usePersistedState("ossm:pattern", 0);
+  const [depth, setDepth] = usePersistedState("ossm:depth", 0.75);
+  const [stroke, setStroke] = usePersistedState("ossm:stroke", 0.5);
+  const [velocity, setVelocity] = usePersistedState("ossm:velocity", 0.75);
+  const [sensation, setSensation] = usePersistedState("ossm:sensation", 0.0);
+  const [timestep, setTimestep] = usePersistedState("ossm:timestep", 20);
+  const [duration, setDuration] = usePersistedState("ossm:duration", 20);
+  const [unitMode, setUnitMode] = usePersistedState<UnitMode>("ossm:unitMode", "relative");
+  const [wasPlaying, setWasPlaying] = usePersistedState("ossm:playing", false);
+  const [focused, setFocused] = useState("position");
+
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const [viewportInsets, setViewportInsets] = useState({ top: 0, left: 0, width: 0, height: 0 });
+  const [scrubPosition, setScrubPosition] = useState<number | null>(null);
+  const lastPatternRef = useRef<number | null>(null);
+  const mountedRef = useRef(false);
+
+  // Sync inputs to simulator
   useEffect(() => {
     simulator.set_depth(depth);
     simulator.set_stroke(stroke);
     simulator.set_velocity(velocity);
     simulator.set_sensation(sensation);
-    if (selectedPattern > 0) {
-      simulator.play(selectedPattern);
+
+    if (!mountedRef.current) {
+      mountedRef.current = true;
+      if (wasPlaying && pattern >= 0) {
+        lastPatternRef.current = pattern;
+        simulator.play(pattern);
+      }
+      return;
     }
-    // Only sync on mount, not on every state change
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [simulator]);
+  }, [simulator, depth, stroke, velocity, sensation]);
 
-  const patterns = useMemo<
-    { index: number; name: string; description: string }[]
-  >(() => {
-    const count = simulator.pattern_count();
-    return Array.from({ length: count }, (_, i) => ({
-      index: i,
-      name: simulator.pattern_name(i),
-      description: simulator.pattern_description(i),
-    }));
-  }, [simulator]);
+  // Play on pattern change
+  useEffect(() => {
+    if (!mountedRef.current) return;
+    if (pattern >= 0 && pattern !== lastPatternRef.current) {
+      lastPatternRef.current = pattern;
+      setWasPlaying(true);
+      simulator.play(pattern);
+    }
+  }, [simulator, pattern, setWasPlaying]);
 
-  const updateDepth = useCallback(
-    (v: number) => {
-      setDepth(v);
-      simulator.set_depth(v);
-    },
-    [simulator, setDepth],
-  );
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const viewport = viewportRef.current;
+    if (!canvas || !viewport) {
+      setViewportInsets({ top: 0, left: 0, width: 0, height: 0 });
+      return;
+    }
 
-  const updateStroke = useCallback(
-    (v: number) => {
-      setStroke(v);
-      simulator.set_stroke(v);
-    },
-    [simulator, setStroke],
-  );
+    const update = () => {
+      const canvasRect = canvas.getBoundingClientRect();
+      const vpRect = viewport.getBoundingClientRect();
+      setViewportInsets({
+        top: vpRect.top - canvasRect.top,
+        left: vpRect.left - canvasRect.left,
+        width: vpRect.width,
+        height: vpRect.height,
+      });
+    };
 
-  const updateVelocity = useCallback(
-    (v: number) => {
-      setVelocity(v);
-      simulator.set_velocity(v);
-    },
-    [simulator, setVelocity],
-  );
+    const observer = new ResizeObserver(update);
+    observer.observe(canvas);
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, [isMobile]);
 
-  const updateSensation = useCallback(
-    (v: number) => {
-      setSensation(v);
-      simulator.set_sensation(v);
-    },
-    [simulator, setSensation],
-  );
+  const { data, chartSeries, stats } = useTrajectoryData({
+    pattern, depth, stroke, velocity, sensation, timestep, duration, unitMode,
+  });
 
   const handlePlay = useCallback(() => {
-    simulator.play(selectedPattern);
-  }, [simulator, selectedPattern]);
+    setWasPlaying(true);
+    lastPatternRef.current = pattern;
+    simulator.play(pattern);
+  }, [simulator, pattern, setWasPlaying]);
 
   const handlePause = useCallback(() => {
     simulator.pause();
@@ -107,226 +117,162 @@ export default function SimulatorPage() {
     simulator.resume();
   }, [simulator]);
 
-  const handleStop = useCallback(() => {
-    simulator.stop();
-  }, [simulator]);
+  const handleResetDefaults = useCallback(() => {
+    setPattern(DEFAULTS.pattern);
+    setDepth(DEFAULTS.depth);
+    setStroke(DEFAULTS.stroke);
+    setVelocity(DEFAULTS.velocity);
+    setSensation(DEFAULTS.sensation);
+    setTimestep(DEFAULTS.timestep);
+    setDuration(DEFAULTS.duration);
+    setUnitMode(DEFAULTS.unitMode);
+  }, [setPattern, setDepth, setStroke, setVelocity, setSensation, setTimestep, setDuration, setUnitMode]);
 
-  const handlePatternChange = useCallback(
-    (value: string) => {
-      const index = Number(value);
-      setSelectedPattern(index);
-      simulator.play(index);
+  const handleScrub = useCallback(
+    (index: number | null) => {
+      setScrubPosition(index != null ? data.position[index] : null);
     },
-    [simulator, setSelectedPattern],
+    [data],
   );
 
   return (
-    <Flex direction={isMobile ? "column" : "row"} gap="3" p="3" style={{ flex: 1 }}>
-      <Box
+    <Box
+      ref={canvasRef}
+      style={{ flex: 1, position: "relative", overflow: "hidden" }}
+    >
+      <Suspense fallback={null}>
+        <Scene
+          ref={sceneRef}
+          simulator={simulator}
+          zoom={isMobile ? 900 : 1500}
+          viewportInsets={viewportInsets}
+          overridePosition={scrubPosition}
+        />
+      </Suspense>
+
+      <div
         style={{
-          flex: isMobile ? undefined : 1,
-          height: isMobile ? "30vh" : undefined,
-          minHeight: 0,
-          position: "relative",
+          position: "absolute",
+          inset: 0,
+          padding: 12,
+          display: "grid",
+          gridTemplateColumns: isMobile ? "1fr" : "1fr 280px",
+          gridTemplateRows: isMobile ? "1fr auto auto" : "1fr auto auto",
+          gridTemplateAreas: isMobile
+            ? `"viewport" "buttons" "sidebar"`
+            : `"viewport sidebar" "buttons sidebar" "chart sidebar"`,
+          gap: isMobile ? 8 : 12,
+          pointerEvents: "none",
         }}
       >
-        <Box
-          style={{
-            width: "100%",
-            height: "100%",
-            borderRadius: "var(--radius-4)",
-            overflow: "hidden",
-          }}
-        >
-          <Suspense
-            fallback={
-              <Flex align="center" justify="center" height="100%" gap="3">
-                <Spinner size="3" />
-                <Text size="2">Loading model…</Text>
-              </Flex>
+        <Flex
+          ref={viewportRef}
+          direction="column"
+          justify="end"
+          style={{ gridArea: "viewport", minHeight: 0 }}
+        />
+
+        <Flex gap="2" align="center" style={{ gridArea: "buttons" }}>
+          <Button
+            variant="outline"
+            size="2"
+            style={glassStyle}
+            onClick={
+              playbackState === "playing" || playbackState === "homing"
+                ? handlePause
+                : playbackState === "paused"
+                  ? handleResume
+                  : handlePlay
             }
           >
-            <Scene
-              ref={sceneRef}
-              simulator={simulator}
-              zoom={isMobile ? 900 : 1500}
-            />
-          </Suspense>
-        </Box>
-      </Box>
+            {playbackState === "playing" || playbackState === "homing" ? (
+              <PauseIcon />
+            ) : (
+              <PlayIcon />
+            )}
+            {playbackState === "playing" || playbackState === "homing"
+              ? "Pause"
+              : playbackState === "paused"
+                ? "Resume"
+                : "Play"}
+          </Button>
+          <Box style={{ flex: 1 }} />
+          <Button
+            variant="outline"
+            size="2"
+            style={glassStyle}
+            onClick={() => sceneRef.current?.resetView()}
+          >
+            <ReloadIcon />
+            Reset View
+          </Button>
+        </Flex>
 
-      <Box
-        style={{
-          width: isMobile ? undefined : "360px",
-          height: isMobile ? "70vh" : undefined,
-          flexShrink: 0,
-        }}
-      >
+        {!isMobile && (
+          <Card
+            size="2"
+            style={{
+              gridArea: "chart",
+              pointerEvents: "auto",
+              backdropFilter: "blur(12px)",
+              backgroundColor: "var(--color-panel-translucent)",
+            }}
+          >
+            <Chart.Legend
+              series={chartSeries}
+              focused={focused}
+              onFocusChange={setFocused}
+            />
+            <Chart.Canvas
+              series={chartSeries}
+              xData={data.time}
+              focused={focused}
+              appearance={appearance}
+              height={175}
+              formatXTick={(v) => `${Math.round(v)}s`}
+              onScrub={handleScrub}
+              mt="2"
+            />
+          </Card>
+        )}
+
         <Card
           size="2"
           style={{
+            gridArea: "sidebar",
+            pointerEvents: "auto",
+            minHeight: 0,
             height: "100%",
             display: "flex",
             flexDirection: "column",
+            overflow: "auto",
+            backdropFilter: "blur(12px)",
+            backgroundColor: "var(--color-panel-translucent)",
           }}
         >
-          <Heading size="5" mb="3">
-            Simulator
-          </Heading>
-
-          <Separator size="4" mb="3" />
-
-          <ScrollArea style={{ flex: 1 }} scrollbars="vertical">
-            <Flex direction="column" gap="4" pr="1">
-              <Box>
-                <Text size="2" weight="medium" mb="1" as="label">
-                  Pattern
-                </Text>
-                <Select.Root
-                  value={String(selectedPattern)}
-                  onValueChange={handlePatternChange}
-                >
-                  <Select.Trigger style={{ width: "100%" }} />
-                  <Select.Content>
-                    {patterns.map((p) => (
-                      <Select.Item key={p.index} value={String(p.index)}>
-                        {p.name}
-                      </Select.Item>
-                    ))}
-                  </Select.Content>
-                </Select.Root>
-                {patterns[selectedPattern] && (
-                  <Text size="1" color="gray" mt="1">
-                    {patterns[selectedPattern].description}
-                  </Text>
-                )}
-              </Box>
-
-              <Flex gap="2" align="center">
-                <IconButton
-                  onClick={
-                    playbackState === "playing" || playbackState === "homing"
-                      ? handlePause
-                      : playbackState === "paused"
-                        ? handleResume
-                        : handlePlay
-                  }
-                  variant="solid"
-                  size="3"
-                  aria-label={
-                    playbackState === "playing" || playbackState === "homing"
-                      ? "Pause"
-                      : playbackState === "paused"
-                        ? "Resume"
-                        : "Play"
-                  }
-                >
-                  {playbackState === "playing" ||
-                  playbackState === "homing" ? (
-                    <PauseIcon />
-                  ) : (
-                    <PlayIcon />
-                  )}
-                </IconButton>
-                <IconButton
-                  onClick={handleStop}
-                  variant="outline"
-                  size="3"
-                  disabled={playbackState === "stopped"}
-                  aria-label="Stop"
-                >
-                  <StopIcon />
-                </IconButton>
-                <Text size="2" color="gray" ml="1">
-                  {playbackState.charAt(0).toUpperCase() +
-                    playbackState.slice(1)}
-                </Text>
-              </Flex>
-
-              <Separator size="4" />
-
-              <LabeledSlider
-                label="Depth"
-                value={depth}
-                min={0}
-                max={1}
-                step={0.01}
-                onChange={updateDepth}
-              />
-              <LabeledSlider
-                label="Stroke"
-                value={stroke}
-                min={0}
-                max={1}
-                step={0.01}
-                onChange={updateStroke}
-              />
-              <LabeledSlider
-                label="Velocity"
-                value={velocity}
-                min={0}
-                max={1}
-                step={0.01}
-                onChange={updateVelocity}
-              />
-              <LabeledSlider
-                label="Sensation"
-                value={sensation}
-                min={-1}
-                max={1}
-                step={0.01}
-                onChange={updateSensation}
-              />
-
-              <Separator size="4" />
-
-              <Button
-                variant="outline"
-                onClick={() => sceneRef.current?.resetView()}
-                style={{ width: "100%" }}
-              >
-                <ResetIcon /> Reset View
-              </Button>
-            </Flex>
-          </ScrollArea>
+          <TrajectorySidebar
+            pattern={pattern}
+            onPatternChange={setPattern}
+            depth={depth}
+            onDepthChange={setDepth}
+            stroke={stroke}
+            onStrokeChange={setStroke}
+            velocity={velocity}
+            onVelocityChange={setVelocity}
+            sensation={sensation}
+            onSensationChange={setSensation}
+            compact={isMobile}
+            unitMode={unitMode}
+            onUnitModeChange={setUnitMode}
+            duration={duration}
+            onDurationValueChange={setDuration}
+            timestep={timestep}
+            onTimestepChange={setTimestep}
+            stats={stats}
+            onResetDefaults={handleResetDefaults}
+          />
         </Card>
-      </Box>
-    </Flex>
-  );
-}
-
-function LabeledSlider({
-  label,
-  value,
-  min,
-  max,
-  step,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  onChange: (v: number) => void;
-}) {
-  return (
-    <Box>
-      <Flex justify="between" mb="1">
-        <Text size="2" weight="medium">
-          {label}
-        </Text>
-        <Text size="2" color="gray">
-          {value}
-        </Text>
-      </Flex>
-      <Slider
-        min={min}
-        max={max}
-        step={step}
-        value={[value]}
-        onValueChange={(values) => onChange(values[0])}
-      />
+      </div>
     </Box>
   );
 }
