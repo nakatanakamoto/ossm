@@ -1,18 +1,21 @@
-use core::sync::atomic::{AtomicI32, Ordering};
-
-use embassy_time::{Delay, Duration, Ticker};
 extern crate alloc;
 use alloc::string::String;
 
+mod recorder;
+
+use embassy_time::{Delay, Duration, Ticker};
+use ossm::planner::RuckigPlanner;
 use ossm::{MechanicalConfig, MotionLimits, Ossm};
-use pattern_engine::{AnyPattern, PatternEngine};
+use pattern_engine::{AnyPattern, PatternEngine, PatternInput, SharedPatternInput};
+use recorder::PatternRecorder;
 use sim_board::SimBoard;
 use sim_motor::SimMotor;
 use wasm_bindgen::prelude::*;
 
+// --- Simulator (real-time, async, for 3D visualization) ---
+
 static OSSM: Ossm = Ossm::new();
 static PATTERNS: PatternEngine = PatternEngine::new(&OSSM);
-static MOTOR_POSITION: AtomicI32 = AtomicI32::new(0);
 
 static MECHANICAL: MechanicalConfig = MechanicalConfig {
     pulley_teeth: 20,
@@ -20,17 +23,10 @@ static MECHANICAL: MechanicalConfig = MechanicalConfig {
 };
 
 #[wasm_bindgen]
-pub struct Simulator {
-    steps_per_mm: f64,
-    min_position_mm: f64,
-    max_position_mm: f64,
-}
+pub struct Simulator {}
 
 #[wasm_bindgen]
 impl Simulator {
-    /// Create a new simulator and start the motion + pattern tasks.
-    ///
-    /// `update_interval_ms` controls the motion controller tick rate (e.g. 10.0 for 10ms).
     #[wasm_bindgen(constructor)]
     pub fn new(update_interval_ms: f64) -> Self {
         ossm::logging::init(log::LevelFilter::Info, |line| {
@@ -40,7 +36,7 @@ impl Simulator {
         ossm::build_info!();
 
         let update_interval_secs = update_interval_ms / 1000.0;
-        let motor = SimMotor::new(&MOTOR_POSITION);
+        let motor = SimMotor::new();
         let board = SimBoard::new(motor, &MECHANICAL);
 
         let limits = MotionLimits {
@@ -49,7 +45,7 @@ impl Simulator {
             ..MotionLimits::default()
         };
 
-        let mut controller = OSSM.controller(board, limits.clone(), update_interval_secs);
+        let mut controller = OSSM.controller(board, limits, update_interval_secs);
 
         let interval_us = (update_interval_secs * 1_000_000.0) as u64;
 
@@ -69,29 +65,17 @@ impl Simulator {
             pattern_runner.run(Delay).await;
         });
 
-        let steps_per_mm = MECHANICAL.steps_per_mm(SimMotor::STEPS_PER_REV) as f64;
-
-        Self {
-            steps_per_mm,
-            min_position_mm: limits.min_position_mm,
-            max_position_mm: limits.max_position_mm,
-        }
+        Self {}
     }
 
-    /// Engine state: 0 = idle, 1 = homing, 2 = playing, 3 = paused.
     pub fn get_engine_state(&self) -> u8 {
         PATTERNS.state().as_u8()
     }
 
-    /// Current position as a fraction of the machine range (0.0-1.0).
-    pub fn get_position(&self) -> f64 {
-        let steps = MOTOR_POSITION.load(Ordering::Relaxed);
-        let mm = steps as f64 / self.steps_per_mm;
-        let range = self.max_position_mm - self.min_position_mm;
-        (mm - self.min_position_mm) / range
+    pub fn get_position(&self) -> f32 {
+        OSSM.motion_state().position
     }
 
-    /// Set the maximum depth as a fraction of the machine range (0.0-1.0).
     pub fn set_depth(&self, depth: f64) {
         PATTERNS.input().sender().send_modify(|opt| {
             if let Some(input) = opt {
@@ -100,7 +84,6 @@ impl Simulator {
         });
     }
 
-    /// Set the stroke length as a fraction of the machine range (0.0-1.0).
     pub fn set_stroke(&self, stroke: f64) {
         PATTERNS.input().sender().send_modify(|opt| {
             if let Some(input) = opt {
@@ -109,7 +92,6 @@ impl Simulator {
         });
     }
 
-    /// Set velocity as a fraction of max velocity (0.0-1.0).
     pub fn set_velocity(&self, velocity: f64) {
         PATTERNS.input().sender().send_modify(|opt| {
             if let Some(input) = opt {
@@ -118,7 +100,6 @@ impl Simulator {
         });
     }
 
-    /// Set sensation value (-1.0 to 1.0). Meaning is pattern-specific.
     pub fn set_sensation(&self, sensation: f64) {
         PATTERNS.input().sender().send_modify(|opt| {
             if let Some(input) = opt {
@@ -159,5 +140,136 @@ impl Simulator {
             .get(index)
             .map(|p| String::from(p.description))
             .unwrap_or_default()
+    }
+}
+
+static RECORDER_OSSM: Ossm = Ossm::new();
+static RECORDER_INPUT: SharedPatternInput = SharedPatternInput::new();
+
+const LIMITS: MotionLimits = MotionLimits::DEFAULT;
+const RANGE_MM: f64 = LIMITS.max_position_mm - LIMITS.min_position_mm;
+
+#[wasm_bindgen]
+pub struct TrajectoryRecorder {}
+
+#[wasm_bindgen]
+impl TrajectoryRecorder {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Self {
+        Self {}
+    }
+
+    pub fn min_position_mm(&self) -> f64 {
+        LIMITS.min_position_mm
+    }
+
+    pub fn max_position_mm(&self) -> f64 {
+        LIMITS.max_position_mm
+    }
+
+    /// Record a trajectory returning three `Float32Array`s: position,
+    /// velocity, and acceleration (all in the 0–1 domain).
+    pub fn record(
+        &self,
+        pattern: usize,
+        depth: f64,
+        stroke: f64,
+        velocity: f64,
+        sensation: f64,
+        timestep_ms: f64,
+        max_samples: usize,
+    ) -> TrajectoryResult {
+        let timestep_secs = timestep_ms / 1000.0;
+
+        let mut planner = RuckigPlanner::new(
+            LIMITS.max_velocity_mm_s / RANGE_MM,
+            LIMITS.max_acceleration_mm_s2 / RANGE_MM,
+            LIMITS.max_jerk_mm_s3 / RANGE_MM,
+            timestep_secs,
+        );
+
+        let mut patterns = AnyPattern::all_builtin();
+        let Some(pat) = patterns.get_mut(pattern) else {
+            return TrajectoryResult::empty();
+        };
+
+        let input = PatternInput {
+            depth,
+            stroke,
+            velocity,
+            sensation,
+        };
+
+        let rest_position = depth * (1.0 - stroke);
+
+        let recorder = PatternRecorder::new(&RECORDER_OSSM, &RECORDER_INPUT);
+        let samples = recorder.record(
+            pat,
+            &mut planner,
+            input,
+            rest_position,
+            timestep_ms,
+            max_samples,
+        );
+
+        let mut position = alloc::vec::Vec::with_capacity(samples.len());
+        let mut velocity = alloc::vec::Vec::with_capacity(samples.len());
+        let mut acceleration = alloc::vec::Vec::with_capacity(samples.len());
+
+        for s in &samples {
+            position.push(s.position as f32);
+            velocity.push(s.velocity as f32);
+            acceleration.push(s.acceleration as f32);
+        }
+
+        TrajectoryResult {
+            position: position.into_boxed_slice(),
+            velocity: velocity.into_boxed_slice(),
+            acceleration: acceleration.into_boxed_slice(),
+        }
+    }
+
+    pub fn pattern_count(&self) -> usize {
+        AnyPattern::BUILTIN_PATTERNS.len()
+    }
+
+    pub fn pattern_name(&self, index: usize) -> String {
+        AnyPattern::BUILTIN_PATTERNS
+            .get(index)
+            .map(|p| String::from(p.name))
+            .unwrap_or_default()
+    }
+}
+
+#[wasm_bindgen]
+pub struct TrajectoryResult {
+    position: Box<[f32]>,
+    velocity: Box<[f32]>,
+    acceleration: Box<[f32]>,
+}
+
+#[wasm_bindgen]
+impl TrajectoryResult {
+    #[wasm_bindgen(getter)]
+    pub fn position(&self) -> Box<[f32]> {
+        self.position.clone()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn velocity(&self) -> Box<[f32]> {
+        self.velocity.clone()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn acceleration(&self) -> Box<[f32]> {
+        self.acceleration.clone()
+    }
+
+    fn empty() -> Self {
+        Self {
+            position: Box::new([]),
+            velocity: Box::new([]),
+            acceleration: Box::new([]),
+        }
     }
 }
