@@ -1,13 +1,20 @@
 import { useRef, useCallback, useSyncExternalStore } from "react";
 import type { Simulator } from "sim-wasm";
 
-type PlaybackState = "stopped" | "homing" | "playing" | "paused";
+export const EngineState = {
+  Stopped: 0,
+  Homing: 1,
+  Playing: 2,
+  Paused: 3,
+} as const;
 
-const ENGINE_STATE_MAP: Record<number, PlaybackState> = {
-  0: "stopped",
-  1: "homing",
-  2: "playing",
-  3: "paused",
+export type PlaybackState = "stopped" | "homing" | "playing" | "paused";
+
+const STATE_LABELS: Record<number, PlaybackState> = {
+  [EngineState.Stopped]: "stopped",
+  [EngineState.Homing]: "homing",
+  [EngineState.Playing]: "playing",
+  [EngineState.Paused]: "paused",
 };
 
 export function useEngineState(simulator: Simulator): PlaybackState {
@@ -18,7 +25,7 @@ export function useEngineState(simulator: Simulator): PlaybackState {
       let raf: number;
       const poll = () => {
         const raw = simulator.get_engine_state();
-        const next = ENGINE_STATE_MAP[raw] ?? "stopped";
+        const next = STATE_LABELS[raw] ?? "stopped";
         if (next !== stateRef.current) {
           stateRef.current = next;
           onStoreChange();
