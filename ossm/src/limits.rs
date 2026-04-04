@@ -19,14 +19,18 @@ pub struct MotionLimits {
     pub max_jerk_mm_s3: f64,
 }
 
+impl MotionLimits {
+    pub const DEFAULT: Self = Self {
+        min_position_mm: 10.0,
+        max_position_mm: 190.0,
+        max_velocity_mm_s: 600.0,
+        max_acceleration_mm_s2: 30_000.0,
+        max_jerk_mm_s3: 100_000.0,
+    };
+}
+
 impl Default for MotionLimits {
     fn default() -> Self {
-        Self {
-            min_position_mm: 10.0,
-            max_position_mm: 190.0,
-            max_velocity_mm_s: 600.0,
-            max_acceleration_mm_s2: 30_000.0,
-            max_jerk_mm_s3: 100_000.0,
-        }
+        Self::DEFAULT
     }
 }
