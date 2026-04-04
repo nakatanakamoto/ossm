@@ -3,6 +3,9 @@ name = "ossm"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+sim = []
+
 [dependencies]
 rsruckig = { version = "2.1.3", default-features = false, features = [
     "libm",
