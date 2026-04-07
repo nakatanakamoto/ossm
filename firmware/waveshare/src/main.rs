@@ -15,7 +15,6 @@ use embassy_time::Delay;
 use embassy_time::{Duration, Ticker};
 use esp_hal::{
     Blocking,
-    gpio::{Level, Output, OutputConfig},
     interrupt::{Priority, software::SoftwareInterruptControl},
     system::Stack,
     timer::timg::TimerGroup,
@@ -29,7 +28,7 @@ use m57aim_motor::{DEFAULT_DEVICE_ADDR, Modbus, Motor57AIM, Motor57AIMConfig, TA
 use ossm::{MechanicalConfig, MotionController, MotionLimits, Ossm};
 
 use ossm_m5_remote::RemoteConfig;
-use rs485_board::{Rs485, Rs485Board, Rs485ModbusTransport};
+use rs485_board::{Rs485Board, Rs485ModbusTransport};
 
 use pattern_engine::{AnyPattern, PatternEngine};
 use static_cell::StaticCell;
@@ -49,8 +48,7 @@ macro_rules! mk_static {
     }};
 }
 
-type ConcreteTransport =
-    Rs485ModbusTransport<Rs485<Uart<'static, Blocking>, Output<'static>>, Delay>;
+type ConcreteTransport = Rs485ModbusTransport<Uart<'static, Blocking>, Delay>;
 type ConcreteMotor = Motor57AIM<Modbus<ConcreteTransport>, Delay>;
 type ConcreteBoard = Rs485Board<ConcreteMotor>;
 
@@ -95,10 +93,9 @@ async fn main(spawner: Spawner) {
         .with_tx(p.GPIO17)
         .with_rx(p.GPIO18);
 
-    let de = Output::new(p.GPIO21, Level::Low, OutputConfig::default());
-    let rs485 = Rs485::new(uart, de);
+    unsafe { ossm_esp::rs485::enable_uart1_rs485(p.GPIO21) };
 
-    let transport = Rs485ModbusTransport::new(rs485, Delay);
+    let transport = Rs485ModbusTransport::new(uart, Delay);
     let motor = Motor57AIM::new(
         Modbus::new(transport, DEFAULT_DEVICE_ADDR),
         Motor57AIMConfig::default(),

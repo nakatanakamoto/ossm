@@ -11,6 +11,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   ESP_TOOLCHAIN_VERSION: "1.94.0.2"
+  WASM_BINDGEN_VERSION: "0.2.118"
 
 jobs:
   build-windows:
@@ -49,7 +50,7 @@ jobs:
           targets: wasm32-unknown-unknown
 
       - name: Install wasm-bindgen-cli
-        run: cargo install wasm-bindgen-cli
+        run: cargo install wasm-bindgen-cli --version ${{ env.WASM_BINDGEN_VERSION }}
 
       - name: Install binaryen
         shell: bash

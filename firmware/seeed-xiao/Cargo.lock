@@ -1286,6 +1286,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "ossm-esp"
+version = "0.1.0"
+dependencies = [
+ "esp-hal",
+]
+
+[[package]]
 name = "ossm-m5-remote"
 version = "0.1.0"
 dependencies = [
@@ -1542,6 +1549,7 @@ dependencies = [
  "log",
  "m57aim-motor",
  "ossm",
+ "ossm-esp",
  "ossm-m5-remote",
  "pattern-engine",
  "portable-atomic",

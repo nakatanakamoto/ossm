@@ -1,6 +1,6 @@
 #![no_std]
 
-pub use ossm::{Rs485, Rs485ModbusTransport};
+pub use ossm::Rs485ModbusTransport;
 
 use ossm::{Board, MechanicalConfig, Rs485Motor, SelfHoming};
 
