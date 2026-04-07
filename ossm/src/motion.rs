@@ -238,6 +238,8 @@ impl<'a, B: Board> MotionController<'a, B> {
             .clamp(self.limits.min_position_mm, self.limits.max_position_mm);
         if let Err(e) = self.board.set_position(mm).await {
             log::error!("Board set_position failed: {:?}", e);
+            self.enter_fault();
+            return Err(e);
         }
         self.output.pass_to_input(&mut self.input);
         self.publish_state();
@@ -382,6 +384,7 @@ impl<'a, B: Board> MotionController<'a, B> {
         let fraction = self.target.as_ref().and_then(|t| t.torque).unwrap_or(1.0);
         if let Err(e) = self.board.set_torque(fraction).await {
             log::error!("Board set_torque failed: {:?}", e);
+            self.enter_fault();
         }
     }
 
