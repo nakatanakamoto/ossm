@@ -1,6 +1,7 @@
 use rsruckig::prelude::*;
 
 use crate::command::{Cancelled, MotionCommand, OssmChannels, StateCommand, StateResponse};
+use crate::state::MotionPhase;
 use crate::{Board, MotionLimits};
 
 // Floor applied to velocity requests to prevent degenerate Ruckig inputs.
@@ -123,17 +124,19 @@ impl<'a, B: Board> MotionController<'a, B> {
 
     async fn process_state_command(&mut self, cmd: StateCommand) -> Result<(), B::Error> {
         match (&self.state, cmd) {
-            (MotionState::Disabled, StateCommand::Enable) => match self.board.enable().await {
-                Ok(()) => {
-                    self.state = MotionState::Enabled;
-                    self.respond(StateResponse::Completed);
+            (MotionState::Disabled, StateCommand::Enable) => {
+                match self.board.enable().await {
+                    Ok(()) => {
+                        self.transition(MotionState::Enabled);
+                        self.respond(StateResponse::Completed);
+                    }
+                    Err(e) => {
+                        log::error!("Board enable failed: {:?}", e);
+                        self.respond(StateResponse::Fault);
+                        return Err(e);
+                    }
                 }
-                Err(e) => {
-                    log::error!("Board enable failed: {:?}", e);
-                    self.respond(StateResponse::Fault);
-                    return Err(e);
-                }
-            },
+            }
             // Idempotent: already in the target state, nothing to do.
             // BLE remote RADR thrashes sometimes causing the catch-all
             // to trigger.
@@ -205,7 +208,7 @@ impl<'a, B: Board> MotionController<'a, B> {
             MotionState::Ready => {
                 self.set_motion_target(cmd);
                 self.apply_torque().await;
-                self.state = MotionState::Moving;
+                self.transition(MotionState::Moving);
             }
 
             MotionState::Moving => {
@@ -237,11 +240,12 @@ impl<'a, B: Board> MotionController<'a, B> {
             log::error!("Board set_position failed: {:?}", e);
         }
         self.output.pass_to_input(&mut self.input);
+        self.publish_state();
 
         if result == RuckigResult::Finished {
             match self.state {
                 MotionState::Stopping(StopReason::Pause) => {
-                    self.state = MotionState::Paused;
+                    self.transition(MotionState::Paused);
                 }
                 MotionState::Stopping(StopReason::Disable) => {
                     self.disable().await;
@@ -256,8 +260,8 @@ impl<'a, B: Board> MotionController<'a, B> {
                 },
                 _ => {
                     self.target = None;
-                    self.state = MotionState::Ready;
                     self.channels.move_resp.signal(Ok(()));
+                    self.transition(MotionState::Ready);
                 }
             }
         }
@@ -268,10 +272,9 @@ impl<'a, B: Board> MotionController<'a, B> {
     /// Run the homing sequence. Transitions to `Ready` on success, stays
     /// `Disabled` on failure.
     async fn home(&mut self) -> Result<(), B::Error> {
-        self.state = MotionState::Disabled;
-
         if let Err(e) = self.board.home().await {
             log::error!("Board home failed: {:?}", e);
+            self.transition(MotionState::Disabled);
             return Err(e);
         }
 
@@ -287,7 +290,7 @@ impl<'a, B: Board> MotionController<'a, B> {
         }
 
         self.target = None;
-        self.state = MotionState::Ready;
+        self.transition(MotionState::Ready);
         Ok(())
     }
 
@@ -299,7 +302,7 @@ impl<'a, B: Board> MotionController<'a, B> {
         }
         self.input.control_interface = ControlInterface::Position;
         self.target = None;
-        self.state = MotionState::Disabled;
+        self.transition(MotionState::Disabled);
     }
 
     fn stop(&mut self, reason: StopReason) {
@@ -308,7 +311,7 @@ impl<'a, B: Board> MotionController<'a, B> {
         self.input.control_interface = ControlInterface::Velocity;
         self.input.target_velocity[0] = 0.0;
         self.output.time = 0.0;
-        self.state = MotionState::Stopping(reason);
+        self.transition(MotionState::Stopping(reason));
     }
 
     async fn resume(&mut self) {
@@ -316,7 +319,7 @@ impl<'a, B: Board> MotionController<'a, B> {
         self.input.control_interface = ControlInterface::Position;
         self.sync_ruckig();
         self.apply_torque().await;
-        self.state = MotionState::Moving;
+        self.transition(MotionState::Moving);
     }
 
     /// Cancel any in-flight motion and transition to `Disabled`.
@@ -337,7 +340,7 @@ impl<'a, B: Board> MotionController<'a, B> {
             _ => {}
         }
         self.target = None;
-        self.state = MotionState::Disabled;
+        self.transition(MotionState::Disabled);
     }
 
     fn respond(&self, resp: StateResponse) {
@@ -380,5 +383,60 @@ impl<'a, B: Board> MotionController<'a, B> {
         if let Err(e) = self.board.set_torque(fraction).await {
             log::error!("Board set_torque failed: {:?}", e);
         }
+    }
+
+    fn phase(&self) -> MotionPhase {
+        match self.state {
+            MotionState::Disabled => MotionPhase::Disabled,
+            MotionState::Enabled => MotionPhase::Enabled,
+            MotionState::Ready => MotionPhase::Ready,
+            MotionState::Moving => MotionPhase::Moving,
+            MotionState::Stopping(_) => MotionPhase::Stopping,
+            MotionState::Paused => MotionPhase::Paused,
+        }
+    }
+
+    fn mm_to_fraction(&self, mm: f64) -> f32 {
+        let range = self.limits.max_position_mm - self.limits.min_position_mm;
+        if range <= 0.0 {
+            return 0.0;
+        }
+        ((mm - self.limits.min_position_mm) / range) as f32
+    }
+
+    fn velocity_to_fraction(&self, mm_s: f64) -> f32 {
+        if self.limits.max_velocity_mm_s <= 0.0 {
+            return 0.0;
+        }
+        (mm_s / self.limits.max_velocity_mm_s) as f32
+    }
+
+    fn acceleration_to_fraction(&self, mm_s2: f64) -> f32 {
+        if self.limits.max_acceleration_mm_s2 <= 0.0 {
+            return 0.0;
+        }
+        (mm_s2 / self.limits.max_acceleration_mm_s2) as f32
+    }
+
+    fn publish_state(&self) {
+        let position_mm = self.output.new_position[0]
+            .clamp(self.limits.min_position_mm, self.limits.max_position_mm);
+        let velocity_mm_s = self.output.new_velocity[0];
+        let acceleration_mm_s2 = self.output.new_acceleration[0];
+        let torque = self.target.as_ref().and_then(|t| t.torque).unwrap_or(1.0);
+
+        self.channels.motion_state.update(crate::state::MotionState {
+            phase: self.phase(),
+            position: self.mm_to_fraction(position_mm),
+            velocity: self.velocity_to_fraction(velocity_mm_s.abs()),
+            acceleration: self.acceleration_to_fraction(acceleration_mm_s2.abs()),
+            torque: torque as f32,
+        });
+    }
+
+    fn transition(&mut self, new_state: MotionState) {
+        self.state = new_state;
+        self.publish_state();
+        self.channels.motion_state.publish_phase(self.phase());
     }
 }

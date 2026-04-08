@@ -6,7 +6,7 @@ export function usePersistedState<T>(
 ): [T, Dispatch<SetStateAction<T>>] {
   const [value, setValue] = useState<T>(() => {
     try {
-      const raw = localStorage.getItem(key);
+      const raw = sessionStorage.getItem(key);
       if (raw != null) return JSON.parse(raw) as T;
     } catch {}
     return defaultValue;
@@ -16,7 +16,7 @@ export function usePersistedState<T>(
     (action) => {
       setValue((prev) => {
         const next = action instanceof Function ? action(prev) : action;
-        localStorage.setItem(key, JSON.stringify(next));
+        sessionStorage.setItem(key, JSON.stringify(next));
         return next;
       });
     },

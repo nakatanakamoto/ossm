@@ -9,6 +9,10 @@ pub mod logging;
 mod mechanical;
 mod motion;
 mod motor;
+pub mod planner;
+#[cfg(feature = "sim")]
+mod sim;
+mod state;
 pub mod transport;
 
 pub use board::Board;
@@ -18,6 +22,7 @@ pub use limits::MotionLimits;
 pub use mechanical::MechanicalConfig;
 pub use motion::MotionController;
 pub use motor::{CurrentSensor, Motor, Rs485Motor, SelfHoming, StepDir};
+pub use state::{MotionPhase, MotionState};
 pub use transport::{
     Modbus, ModbusTransport, Rs485, Rs485ModbusTransport, StepDirConfig, StepDirError,
     StepDirMotor, StepOutput, TransportError,
@@ -94,4 +99,30 @@ impl Ossm {
     pub async fn await_motion(&self) -> Result<(), Cancelled> {
         self.channels.move_resp.wait().await
     }
+
+    /// Read the current motion state (position, velocity, torque, phase).
+    pub fn motion_state(&self) -> MotionState {
+        self.channels.motion_state.get()
+    }
+
+    /// Create an async subscriber that receives [`MotionPhase`] on every
+    /// phase transition.
+    ///
+    /// Returns `Err` if all subscriber slots are in use.
+    pub fn phase_subscriber(
+        &self,
+    ) -> Result<
+        embassy_sync::pubsub::Subscriber<
+            '_,
+            embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex,
+            MotionPhase,
+            1,
+            8,
+            0,
+        >,
+        embassy_sync::pubsub::Error,
+    > {
+        self.channels.motion_state.phase_subscriber()
+    }
+
 }

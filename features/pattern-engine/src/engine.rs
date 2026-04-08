@@ -335,17 +335,7 @@ impl<const N: usize> PatternEngineRunner<N> {
                                     engine.channels.store(EngineState::Playing(idx));
                                     engine.publish_state(EngineState::Playing(idx));
                                 }
-                                EngineCommand::Play(i) if i == idx => {
-                                    if ossm.resume().await != StateResponse::Completed {
-                                        log::error!("Resume failed, stopping engine");
-                                        *state = RunnerState::Idle;
-                                        engine.channels.store(EngineState::Idle);
-                                        engine.publish_state(EngineState::Idle);
-                                        break;
-                                    }
-                                    engine.channels.store(EngineState::Playing(idx));
-                                    engine.publish_state(EngineState::Playing(idx));
-                                }
+                                EngineCommand::Play(i) if i == idx => {}
                                 EngineCommand::Play(new_idx) if new_idx < N => {
                                     *state = RunnerState::Playing(new_idx);
                                     engine.channels.store(EngineState::Playing(new_idx));
