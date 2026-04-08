@@ -127,8 +127,7 @@ impl<'a, B: Board> MotionController<'a, B> {
             (MotionState::Disabled, StateCommand::Enable) => {
                 match self.board.enable().await {
                     Ok(()) => {
-                        self.state = MotionState::Enabled;
-                        self.publish_phase_transition();
+                        self.transition(MotionState::Enabled);
                         self.respond(StateResponse::Completed);
                     }
                     Err(e) => {
@@ -209,8 +208,7 @@ impl<'a, B: Board> MotionController<'a, B> {
             MotionState::Ready => {
                 self.set_motion_target(cmd);
                 self.apply_torque().await;
-                self.state = MotionState::Moving;
-                self.publish_phase_transition();
+                self.transition(MotionState::Moving);
             }
 
             MotionState::Moving => {
@@ -247,8 +245,7 @@ impl<'a, B: Board> MotionController<'a, B> {
         if result == RuckigResult::Finished {
             match self.state {
                 MotionState::Stopping(StopReason::Pause) => {
-                    self.state = MotionState::Paused;
-                    self.publish_phase_transition();
+                    self.transition(MotionState::Paused);
                 }
                 MotionState::Stopping(StopReason::Disable) => {
                     self.disable().await;
@@ -263,9 +260,8 @@ impl<'a, B: Board> MotionController<'a, B> {
                 },
                 _ => {
                     self.target = None;
-                    self.state = MotionState::Ready;
                     self.channels.move_resp.signal(Ok(()));
-                    self.publish_phase_transition();
+                    self.transition(MotionState::Ready);
                 }
             }
         }
@@ -276,11 +272,9 @@ impl<'a, B: Board> MotionController<'a, B> {
     /// Run the homing sequence. Transitions to `Ready` on success, stays
     /// `Disabled` on failure.
     async fn home(&mut self) -> Result<(), B::Error> {
-        self.state = MotionState::Disabled;
-
         if let Err(e) = self.board.home().await {
             log::error!("Board home failed: {:?}", e);
-            self.publish_phase_transition();
+            self.transition(MotionState::Disabled);
             return Err(e);
         }
 
@@ -296,8 +290,7 @@ impl<'a, B: Board> MotionController<'a, B> {
         }
 
         self.target = None;
-        self.state = MotionState::Ready;
-        self.publish_phase_transition();
+        self.transition(MotionState::Ready);
         Ok(())
     }
 
@@ -309,8 +302,7 @@ impl<'a, B: Board> MotionController<'a, B> {
         }
         self.input.control_interface = ControlInterface::Position;
         self.target = None;
-        self.state = MotionState::Disabled;
-        self.publish_phase_transition();
+        self.transition(MotionState::Disabled);
     }
 
     fn stop(&mut self, reason: StopReason) {
@@ -319,8 +311,7 @@ impl<'a, B: Board> MotionController<'a, B> {
         self.input.control_interface = ControlInterface::Velocity;
         self.input.target_velocity[0] = 0.0;
         self.output.time = 0.0;
-        self.state = MotionState::Stopping(reason);
-        self.publish_phase_transition();
+        self.transition(MotionState::Stopping(reason));
     }
 
     async fn resume(&mut self) {
@@ -328,8 +319,7 @@ impl<'a, B: Board> MotionController<'a, B> {
         self.input.control_interface = ControlInterface::Position;
         self.sync_ruckig();
         self.apply_torque().await;
-        self.state = MotionState::Moving;
-        self.publish_phase_transition();
+        self.transition(MotionState::Moving);
     }
 
     /// Cancel any in-flight motion and transition to `Disabled`.
@@ -350,8 +340,7 @@ impl<'a, B: Board> MotionController<'a, B> {
             _ => {}
         }
         self.target = None;
-        self.state = MotionState::Disabled;
-        self.publish_phase_transition();
+        self.transition(MotionState::Disabled);
     }
 
     fn respond(&self, resp: StateResponse) {
@@ -445,7 +434,8 @@ impl<'a, B: Board> MotionController<'a, B> {
         });
     }
 
-    fn publish_phase_transition(&self) {
+    fn transition(&mut self, new_state: MotionState) {
+        self.state = new_state;
         self.publish_state();
         self.channels.motion_state.publish_phase(self.phase());
     }
