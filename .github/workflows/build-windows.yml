@@ -2,6 +2,11 @@ name: Build (Windows)
 
 on:
   workflow_call:
+    inputs:
+      ref:
+        description: Git ref to check out (defaults to the triggering event ref)
+        type: string
+        default: ''
 
 env:
   CARGO_TERM_COLOR: always
@@ -13,6 +18,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref || '' }}
 
       - uses: esp-rs/xtensa-toolchain@v1.5
         with:

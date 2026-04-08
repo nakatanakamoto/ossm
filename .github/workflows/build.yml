@@ -3,6 +3,10 @@ name: Build
 on:
   workflow_call:
     inputs:
+      ref:
+        description: Git ref to check out (defaults to the triggering event ref)
+        type: string
+        default: ''
       upload-artifacts:
         description: Upload firmware binaries as artifacts
         type: boolean
@@ -39,6 +43,8 @@ jobs:
             target: xtensa-esp32-none-elf
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref || '' }}
 
       - uses: esp-rs/xtensa-toolchain@v1.5
         with:
@@ -77,6 +83,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref || '' }}
 
       - uses: dtolnay/rust-toolchain@stable
         with:
