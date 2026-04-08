@@ -1,10 +1,16 @@
 name: Deploy Web Tools
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    types: [opened, synchronize, reopened]
+  workflow_call:
+    inputs:
+      pr-number:
+        description: PR number for preview deployment (empty for production)
+        type: string
+        default: ''
+      run-id:
+        description: Workflow run ID to download artifacts from (defaults to current run)
+        type: string
+        default: ''
 
 jobs:
   deploy:
@@ -16,23 +22,16 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v5
-
-      - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: wasm32-unknown-unknown
+          sparse-checkout: apps/web-tools
 
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Install wasm-bindgen-cli
-        run: cargo install wasm-bindgen-cli
-
-      - name: Install binaryen
-        run: sudo apt-get install -y binaryen
-
-      - uses: extractions/setup-just@v2
-
-      - name: Build WASM
-        run: just build-wasm
+      - name: Download web tools artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: web-tools
+          path: apps/web-tools/dist
+          run-id: ${{ inputs.run-id && inputs.run-id || github.run_id }}
+          github-token: ${{ github.token }}
 
       - uses: pnpm/action-setup@v4
         with:
@@ -45,25 +44,30 @@ jobs:
 
       - run: pnpm install
         working-directory: apps/web-tools
-      - run: pnpm run build
-        working-directory: apps/web-tools
 
       - name: Set deploy metadata
-        if: github.actor != 'dependabot[bot]'
         id: meta
+        env:
+          HAS_DEPLOY_SECRETS: ${{ secrets.CLOUDFLARE_API_TOKEN && 'true' || 'false' }}
         run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
+          echo "should-deploy=$HAS_DEPLOY_SECRETS" >> "$GITHUB_OUTPUT"
+
+          if [ -n "${{ inputs.pr-number }}" ]; then
+            PR="${{ inputs.pr-number }}"
+            echo "is-pr=true" >> "$GITHUB_OUTPUT"
+            echo "pr-number=$PR" >> "$GITHUB_OUTPUT"
+            echo "environment=Preview (PR #$PR)" >> "$GITHUB_OUTPUT"
+            echo "url=https://pr-$PR-web-tools.ossm-rs.workers.dev" >> "$GITHUB_OUTPUT"
+            echo "transient=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is-pr=false" >> "$GITHUB_OUTPUT"
             echo "environment=Production" >> "$GITHUB_OUTPUT"
             echo "url=https://web-tools.ossm.rs" >> "$GITHUB_OUTPUT"
             echo "transient=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "environment=Preview (PR #${{ github.event.pull_request.number }})" >> "$GITHUB_OUTPUT"
-            echo "url=https://pr-${{ github.event.pull_request.number }}-web-tools.ossm-rs.workers.dev" >> "$GITHUB_OUTPUT"
-            echo "transient=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Create GitHub deployment
-        if: github.actor != 'dependabot[bot]'
+        if: steps.meta.outputs.should-deploy == 'true'
         id: deployment
         uses: chrnorm/deployment-action@v2
         with:
@@ -73,23 +77,23 @@ jobs:
           transient-environment: ${{ steps.meta.outputs.transient }}
 
       - name: Deploy to production
-        if: github.event_name == 'push'
+        if: steps.meta.outputs.should-deploy == 'true' && steps.meta.outputs.is-pr == 'false'
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: "4"
-          command: deploy
+          command: deploy --config dist/web_tools/wrangler.json
           workingDirectory: apps/web-tools
 
       - name: Deploy PR preview
-        if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
+        if: steps.meta.outputs.should-deploy == 'true' && steps.meta.outputs.is-pr == 'true'
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: "4"
-          command: versions upload --env="" --preview-alias pr-${{ github.event.pull_request.number }}
+          command: versions upload --config dist/web_tools/wrangler.json --env="" --preview-alias pr-${{ steps.meta.outputs.pr-number }}
           workingDirectory: apps/web-tools
 
       - name: Update deployment status (success)
@@ -110,20 +114,21 @@ jobs:
           deployment-id: ${{ steps.deployment.outputs.deployment_id }}
 
       - name: Get deploy timestamp
-        if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
+        if: steps.meta.outputs.should-deploy == 'true' && steps.meta.outputs.is-pr == 'true'
         id: timestamp
         run: echo "time=$(date -u +'%b %d, %Y at %H:%M UTC')" >> "$GITHUB_OUTPUT"
 
       - name: Comment preview URL on PR
-        if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
+        if: steps.meta.outputs.should-deploy == 'true' && steps.meta.outputs.is-pr == 'true'
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: cloudflare-preview
+          number: ${{ steps.meta.outputs.pr-number }}
           message: |
             ## Web Tools Preview
 
             Preview deployment for this PR is ready.
 
-            https://pr-${{ github.event.pull_request.number }}-web-tools.ossm-rs.workers.dev
+            https://pr-${{ steps.meta.outputs.pr-number }}-web-tools.ossm-rs.workers.dev
 
             <sub>Deployed on ${{ steps.timestamp.outputs.time }}</sub>

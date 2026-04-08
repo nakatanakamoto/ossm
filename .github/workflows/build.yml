@@ -78,8 +78,8 @@ jobs:
           name: ${{ matrix.firmware }}
           path: ${{ matrix.firmware }}.bin
 
-  build-wasm:
-    name: Build WASM
+  build-webtools:
+    name: Build Web Tools
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -104,3 +104,24 @@ jobs:
         run: just build-wasm
         env:
           OSSM_RELEASE_ID: ${{ inputs.release-id }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: apps/web-tools/.nvmrc
+          cache: pnpm
+          cache-dependency-path: apps/web-tools/pnpm-lock.yaml
+
+      - run: pnpm install
+        working-directory: apps/web-tools
+      - run: pnpm run build
+        working-directory: apps/web-tools
+
+      - name: Upload web tools artifact
+        if: inputs.upload-artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-tools
+          path: apps/web-tools/dist
