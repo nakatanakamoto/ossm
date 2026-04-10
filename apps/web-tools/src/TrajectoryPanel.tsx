@@ -1,5 +1,8 @@
 import { useMemo, type ComponentProps } from "react";
-import { TrajectoryRecorder } from "sim-wasm";
+import init, { TrajectoryRecorder } from "@ossm-rs/trajectory-recorder";
+import wasmUrl from "@ossm-rs/trajectory-recorder/trajectory_recorder_bg.wasm?url";
+
+await init({ module_or_path: wasmUrl });
 import {
   Box,
   Flex,

@@ -43,12 +43,22 @@ flash-ossm-reference:
 
 
 # WASM Simulator
-[working-directory: 'firmware/sim-wasm']
-build-wasm:
+[working-directory: 'bindings/web-simulator']
+build-wasm-simulator:
     cargo +stable build --release
-    wasm-bindgen --target web --out-dir pkg target/wasm32-unknown-unknown/release/sim_wasm.wasm
-    wasm-opt -O --all-features -o pkg/sim_wasm_bg.wasm pkg/sim_wasm_bg.wasm
-    echo '{"name":"sim-wasm","type":"module","main":"sim_wasm.js","types":"sim_wasm.d.ts"}' > pkg/package.json
+    wasm-bindgen --target web --out-dir pkg target/wasm32-unknown-unknown/release/web_simulator.wasm
+    wasm-opt -O --all-features -o pkg/web_simulator_bg.wasm pkg/web_simulator_bg.wasm
+    echo '{"name":"@ossm-rs/web-simulator","type":"module","main":"web_simulator.js","types":"web_simulator.d.ts"}' > pkg/package.json
+
+# WASM Trajectory Recorder
+[working-directory: 'bindings/trajectory-recorder']
+build-wasm-recorder:
+    cargo +stable build --release
+    wasm-bindgen --target web --out-dir pkg target/wasm32-unknown-unknown/release/trajectory_recorder.wasm
+    wasm-opt -O --all-features -o pkg/trajectory_recorder_bg.wasm pkg/trajectory_recorder_bg.wasm
+    echo '{"name":"@ossm-rs/trajectory-recorder","type":"module","main":"trajectory_recorder.js","types":"trajectory_recorder.d.ts"}' > pkg/package.json
+
+build-wasm: build-wasm-simulator build-wasm-recorder
 
 # Dev server (watches Rust sources and hot-reloads WASM)
 [working-directory: 'apps/web-tools']

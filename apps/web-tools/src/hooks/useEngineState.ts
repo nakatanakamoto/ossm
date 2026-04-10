@@ -1,5 +1,5 @@
 import { useRef, useCallback, useSyncExternalStore } from "react";
-import type { Simulator } from "sim-wasm";
+import type { Simulator } from "@ossm-rs/web-simulator";
 
 export const EngineState = {
   Stopped: 0,

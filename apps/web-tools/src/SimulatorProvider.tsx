@@ -1,6 +1,6 @@
 import { createContext, useEffect, useState, type ReactNode } from "react";
-import init, { Simulator } from "sim-wasm";
-import wasmUrl from "sim-wasm/sim_wasm_bg.wasm?url";
+import init, { Simulator } from "@ossm-rs/web-simulator";
+import wasmUrl from "@ossm-rs/web-simulator/web_simulator_bg.wasm?url";
 
 let wasmReady: Promise<void> | null = null;
 function ensureWasmInit() {
