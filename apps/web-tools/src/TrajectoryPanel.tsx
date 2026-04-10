@@ -1,5 +1,5 @@
 import { useMemo, type ComponentProps } from "react";
-import { TrajectoryRecorder } from "sim-wasm";
+import { TrajectoryRecorder } from "sim-recorder";
 import {
   Box,
   Flex,

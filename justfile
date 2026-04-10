@@ -44,11 +44,21 @@ flash-ossm-reference:
 
 # WASM Simulator
 [working-directory: 'firmware/sim-wasm']
-build-wasm:
+build-wasm-simulator:
     cargo +stable build --release
     wasm-bindgen --target web --out-dir pkg target/wasm32-unknown-unknown/release/sim_wasm.wasm
     wasm-opt -O --all-features -o pkg/sim_wasm_bg.wasm pkg/sim_wasm_bg.wasm
     echo '{"name":"sim-wasm","type":"module","main":"sim_wasm.js","types":"sim_wasm.d.ts"}' > pkg/package.json
+
+# WASM Trajectory Recorder
+[working-directory: 'firmware/sim-recorder']
+build-wasm-recorder:
+    cargo +stable build --release
+    wasm-bindgen --target web --out-dir pkg target/wasm32-unknown-unknown/release/sim_recorder.wasm
+    wasm-opt -O --all-features -o pkg/sim_recorder_bg.wasm pkg/sim_recorder_bg.wasm
+    echo '{"name":"sim-recorder","type":"module","main":"sim_recorder.js","types":"sim_recorder.d.ts"}' > pkg/package.json
+
+build-wasm: build-wasm-simulator build-wasm-recorder
 
 # Dev server (watches Rust sources and hot-reloads WASM)
 [working-directory: 'apps/web-tools']

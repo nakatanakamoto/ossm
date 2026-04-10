@@ -16,6 +16,7 @@ function wasmHotReload(): Plugin {
 
       const rustDirs = [
         "firmware/sim-wasm/src",
+        "firmware/sim-recorder/src",
         "ossm/src",
         "drivers/sim-motor/src",
         "features/pattern-engine/src",
@@ -74,11 +75,11 @@ function wasmHotReload(): Plugin {
 
 export default defineConfig({
   optimizeDeps: {
-    exclude: ["sim-wasm"],
+    exclude: ["sim-wasm", "sim-recorder"],
   },
   server: {
     watch: {
-      ignored: ["**/firmware/sim-wasm/pkg/**"],
+      ignored: ["**/firmware/sim-wasm/pkg/**", "**/firmware/sim-recorder/pkg/**"],
     },
   },
   plugins: [react(), wasm(), topLevelAwait(), wasmHotReload(), cloudflare()],
