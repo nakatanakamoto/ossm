@@ -23,7 +23,7 @@ import {
 } from "three";
 import type { Object3D } from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import type { Simulator } from "sim-wasm";
+import type { Simulator } from "@ossm-rs/web-simulator";
 import { useAppearance } from "./hooks/useAppearance";
 
 const MODEL_URL = "/models/ossm-alt.gltf";

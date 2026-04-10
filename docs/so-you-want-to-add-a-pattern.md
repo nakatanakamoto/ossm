@@ -63,7 +63,7 @@ Cloudflare Worker functions should be used sparingly and only when entirely nece
 
 ### 1. Create the pattern file
 
-Add a new file in `features/pattern-engine/src/patterns/`. For example, `my_pattern.rs`:
+Add a new file in `crates/pattern-engine/src/patterns/`. For example, `my_pattern.rs`:
 
 ```rust
 use embedded_hal_async::delay::DelayNs;

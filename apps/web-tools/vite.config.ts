@@ -15,11 +15,11 @@ function wasmHotReload(): Plugin {
       const workspaceRoot = path.resolve(root, "../..");
 
       const rustDirs = [
-        "firmware/sim-wasm/src",
-        "firmware/sim-recorder/src",
+        "bindings/web-simulator/src",
+        "bindings/trajectory-recorder/src",
         "ossm/src",
         "drivers/sim-motor/src",
-        "features/pattern-engine/src",
+        "crates/pattern-engine/src",
       ].map((d) => path.resolve(workspaceRoot, d));
 
       for (const dir of rustDirs) {
@@ -75,11 +75,14 @@ function wasmHotReload(): Plugin {
 
 export default defineConfig({
   optimizeDeps: {
-    exclude: ["sim-wasm", "sim-recorder"],
+    exclude: ["@ossm-rs/web-simulator", "@ossm-rs/trajectory-recorder"],
   },
   server: {
     watch: {
-      ignored: ["**/firmware/sim-wasm/pkg/**", "**/firmware/sim-recorder/pkg/**"],
+      ignored: [
+        "**/bindings/web-simulator/pkg/**",
+        "**/bindings/trajectory-recorder/pkg/**",
+      ],
     },
   },
   plugins: [react(), wasm(), topLevelAwait(), wasmHotReload(), cloudflare()],

@@ -198,7 +198,6 @@ The `just focus` command links a firmware's config tomls to the workspace root t
 ```sh
 just focus ossm-alt
 just focus ossm-reference
-just focus wasm
 ```
 
 After running this, you may need to restart rust-analyzer (or reload your editor) to pick up the new settings. You only need to re-run it when switching to a different target.

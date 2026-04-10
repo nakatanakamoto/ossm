@@ -10,10 +10,10 @@ rust-version = "1.88"
 
 [dependencies]
 ossm = { path = "../../ossm" }
-pattern-engine = { path = "../../features/pattern-engine" }
+pattern-engine = { path = "../../crates/pattern-engine" }
 m57aim-motor = { path = "../../drivers/m57aim" }
 stepdir-board = { path = "../../boards/stepdir" }
-ble-remote = { path = "../../features/ble-remote", features = [
+ble-remote = { path = "../../crates/ble-remote", features = [
     "esp32",
 ] }
 
