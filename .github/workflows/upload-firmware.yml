@@ -60,11 +60,10 @@ jobs:
           done
           echo "list=$boards" >> "$GITHUB_OUTPUT"
 
-      - name: Compute SHA256 hashes
+      - name: Read content hashes
         run: |
           for board in ${{ steps.boards.outputs.list }}; do
-            hash=$(sha256sum "firmware-bins/${board}/${board}.bin" | cut -d' ' -f1)
-            echo "$hash" > "firmware-bins/${board}.sha256"
+            cp "firmware-bins/${board}/${board}.sha256" "firmware-bins/${board}.sha256"
           done
 
       - name: Upload firmware to R2 (PR)
@@ -126,7 +125,7 @@ jobs:
             echo "|-------|--------|-|"
 
             for board in ${{ steps.boards.outputs.list }}; do
-              pr_hash=$(sha256sum "firmware-bins/${board}/${board}.bin" | cut -d' ' -f1)
+              pr_hash=$(cat "firmware-bins/${board}/${board}.sha256")
               main_hash=$(npx wrangler@4 r2 object get --remote "ossm-firmware/main/${board}.sha256" --pipe 2>/dev/null) || main_hash="none"
 
               if [ -z "$main_hash" ] || [ "$main_hash" = "none" ]; then

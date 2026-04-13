@@ -3,6 +3,7 @@ extern crate alloc;
 
 mod board;
 mod build_info;
+pub use build_info::BuildMeta;
 mod command;
 mod limits;
 pub mod logging;
