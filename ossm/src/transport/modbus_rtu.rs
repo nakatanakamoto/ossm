@@ -1,11 +1,13 @@
+use embassy_time::Instant;
 use embedded_hal_async::delay::DelayNs;
-use embedded_io::{ErrorType, Read, Write};
+use embedded_io::{ErrorType, Write};
 use heapless::Vec;
 
 use super::ModbusTransport;
 
-const MOTOR_TIMEOUT_RETRIES: usize = 500;
-const RETRY_DELAY_US: u32 = 20;
+const RESPONSE_TIMEOUT_MS: u64 = 100;
+const MAX_RETRIES: usize = 3;
+const POLL_DELAY_US: u32 = 20;
 const INTER_COMMAND_DELAY_US: u32 = 2_000;
 const MIN_FRAME_BYTES: usize = 3;
 const MAX_REGS_PER_READ: usize = 8;
@@ -14,12 +16,23 @@ const MAX_REGS_PER_READ: usize = 8;
 pub enum TransportError<E: core::fmt::Debug> {
     Uart(E),
     Timeout,
+    /// Wire corruption: garbled header, CRC mismatch, etc. Retryable.
+    Corrupt(&'static str),
+    /// Logic/programming error: failed to build request, buffer too small. Fatal.
     Protocol(&'static str),
+}
+
+/// Non-blocking read: returns 0 immediately when no data is available.
+/// Required for timeout support — `embedded_io::Read` on blocking UARTs
+/// hangs forever waiting for data, making timeouts impossible.
+pub trait ReadNonBlocking: ErrorType {
+    fn read_nb(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error>;
 }
 
 /// ModbusTransport over RS485 UART.
 ///
-/// Handles RTU framing, CRC, and response parsing.
+/// Handles RTU framing, CRC, response parsing, and automatic retries
+/// on timeout.
 pub struct Rs485ModbusTransport<UART, DELAY> {
     uart: UART,
     delay: DELAY,
@@ -27,69 +40,83 @@ pub struct Rs485ModbusTransport<UART, DELAY> {
 
 impl<UART, DELAY> Rs485ModbusTransport<UART, DELAY>
 where
-    UART: Read + Write,
+    UART: ReadNonBlocking + Write,
     DELAY: DelayNs,
 {
     pub fn new(uart: UART, delay: DELAY) -> Self {
         Self { uart, delay }
     }
 
+    /// Read exactly `buf.len()` bytes, with a deadline.
     async fn read_exact(
         &mut self,
         buf: &mut [u8],
+        deadline: Instant,
     ) -> Result<(), TransportError<<UART as ErrorType>::Error>> {
         let mut remaining = buf;
-        let mut retries = 0;
         while !remaining.is_empty() {
-            match self.uart.read(remaining) {
-                Ok(0) => {
-                    retries += 1;
-                    if retries >= MOTOR_TIMEOUT_RETRIES {
-                        return Err(TransportError::Timeout);
-                    }
-                    self.delay.delay_us(RETRY_DELAY_US).await;
-                }
-                Ok(n) => {
-                    retries = 0;
-                    remaining = &mut remaining[n..];
-                }
+            if Instant::now() > deadline {
+                return Err(TransportError::Timeout);
+            }
+            match self.uart.read_nb(remaining) {
+                Ok(0) => self.delay.delay_us(POLL_DELAY_US).await,
+                Ok(n) => remaining = &mut remaining[n..],
                 Err(e) => return Err(TransportError::Uart(e)),
             }
         }
         Ok(())
     }
 
+    /// Drain any stale bytes from the RX FIFO.
+    fn drain_rx(&mut self) {
+        let mut junk = [0u8; 32];
+        while let Ok(n) = self.uart.read_nb(&mut junk) {
+            if n == 0 {
+                break;
+            }
+        }
+    }
+
     async fn read_response(
         &mut self,
         buf: &mut [u8],
+        deadline: Instant,
     ) -> Result<usize, TransportError<<UART as ErrorType>::Error>> {
-        self.read_exact(&mut buf[0..MIN_FRAME_BYTES]).await?;
+        self.read_exact(&mut buf[0..MIN_FRAME_BYTES], deadline)
+            .await?;
         let len =
             rmodbus::guess_response_frame_len(&buf[0..MIN_FRAME_BYTES], rmodbus::ModbusProto::Rtu)
-                .map_err(|_| TransportError::Protocol("failed to guess frame length"))?
+                .map_err(|_| TransportError::Corrupt("failed to guess frame length"))?
                 as usize;
+        if len > buf.len() {
+            return Err(TransportError::Corrupt("guessed frame length exceeds buffer"));
+        }
         if len > MIN_FRAME_BYTES {
-            self.read_exact(&mut buf[MIN_FRAME_BYTES..len]).await?;
+            self.read_exact(&mut buf[MIN_FRAME_BYTES..len], deadline)
+                .await?;
         }
         Ok(len)
     }
 
-    async fn send_and_receive(
+    /// Send a request and read the raw response. Single attempt, no retry.
+    async fn exchange(
         &mut self,
         request: &[u8],
         response_buf: &mut [u8],
     ) -> Result<usize, TransportError<<UART as ErrorType>::Error>> {
+        self.drain_rx();
         self.uart.write_all(request).map_err(TransportError::Uart)?;
         self.uart.flush().map_err(TransportError::Uart)?;
-        let len = self.read_response(response_buf).await?;
-        self.delay.delay_us(INTER_COMMAND_DELAY_US).await;
-        Ok(len)
+
+        let deadline =
+            Instant::now() + embassy_time::Duration::from_millis(RESPONSE_TIMEOUT_MS);
+        self.read_response(response_buf, deadline).await
     }
 }
 
 impl<UART, DELAY> ModbusTransport for Rs485ModbusTransport<UART, DELAY>
 where
-    UART: Read + Write,
+    UART: ReadNonBlocking + Write,
     <UART as ErrorType>::Error: core::fmt::Debug,
     DELAY: DelayNs,
 {
@@ -108,11 +135,28 @@ where
             .generate_set_holding(register, value, &mut request)
             .map_err(|_| TransportError::Protocol("failed to generate write request"))?;
         let mut response = [0u8; 32];
-        let len = self.send_and_receive(&request, &mut response).await?;
-        modbus_req
-            .parse_ok(&response[..len])
-            .map_err(|_| TransportError::Protocol("write response parse error"))?;
-        Ok(())
+        for attempt in 0..MAX_RETRIES {
+            match self.exchange(&request, &mut response).await {
+                Ok(len) => match modbus_req.parse_ok(&response[..len]) {
+                    Ok(()) => {
+                        self.delay.delay_us(INTER_COMMAND_DELAY_US).await;
+                        return Ok(());
+                    }
+                    Err(_) => log::warn!(
+                        "Modbus write corrupt response, retry {}/{}",
+                        attempt + 1,
+                        MAX_RETRIES
+                    ),
+                },
+                Err(TransportError::Timeout | TransportError::Corrupt(_)) => log::warn!(
+                    "Modbus write timeout/corrupt, retry {}/{}",
+                    attempt + 1,
+                    MAX_RETRIES
+                ),
+                Err(e) => return Err(e),
+            }
+        }
+        Err(TransportError::Timeout)
     }
 
     async fn read_holding(
@@ -128,12 +172,31 @@ where
             .generate_get_holdings(register, count, &mut request)
             .map_err(|_| TransportError::Protocol("failed to generate read request"))?;
         let mut response = [0u8; 32];
-        let len = self.send_and_receive(&request, &mut response).await?;
-        let mut result: Vec<u16, MAX_REGS_PER_READ> = Vec::new();
-        modbus_req
-            .parse_u16(&response[..len], &mut result)
-            .map_err(|_| TransportError::Protocol("read response parse error"))?;
-        Ok(result)
+        for attempt in 0..MAX_RETRIES {
+            match self.exchange(&request, &mut response).await {
+                Ok(len) => {
+                    let mut result: Vec<u16, MAX_REGS_PER_READ> = Vec::new();
+                    match modbus_req.parse_u16(&response[..len], &mut result) {
+                        Ok(()) => {
+                            self.delay.delay_us(INTER_COMMAND_DELAY_US).await;
+                            return Ok(result);
+                        }
+                        Err(_) => log::warn!(
+                            "Modbus read corrupt response, retry {}/{}",
+                            attempt + 1,
+                            MAX_RETRIES
+                        ),
+                    }
+                }
+                Err(TransportError::Timeout | TransportError::Corrupt(_)) => log::warn!(
+                    "Modbus read timeout/corrupt, retry {}/{}",
+                    attempt + 1,
+                    MAX_RETRIES
+                ),
+                Err(e) => return Err(e),
+            }
+        }
+        Err(TransportError::Timeout)
     }
 
     async fn raw_transaction(
@@ -151,11 +214,25 @@ where
         frame
             .extend_from_slice(&crc)
             .map_err(|_| TransportError::Protocol("request + CRC exceeds frame buffer"))?;
-        self.uart.write_all(&frame).map_err(TransportError::Uart)?;
-        self.uart.flush().map_err(TransportError::Uart)?;
-        let expected_len = response.len();
-        self.read_exact(&mut response[..expected_len]).await?;
-        self.delay.delay_us(INTER_COMMAND_DELAY_US).await;
-        Ok(expected_len)
+        for attempt in 0..MAX_RETRIES {
+            self.drain_rx();
+            self.uart.write_all(&frame).map_err(TransportError::Uart)?;
+            self.uart.flush().map_err(TransportError::Uart)?;
+
+            let deadline =
+                Instant::now() + embassy_time::Duration::from_millis(RESPONSE_TIMEOUT_MS);
+            let expected_len = response.len();
+            match self.read_exact(&mut response[..expected_len], deadline).await {
+                Ok(()) => {
+                    self.delay.delay_us(INTER_COMMAND_DELAY_US).await;
+                    return Ok(expected_len);
+                }
+                Err(TransportError::Timeout | TransportError::Corrupt(_)) => {
+                    log::warn!("Modbus raw timeout/corrupt, retry {}/{}", attempt + 1, MAX_RETRIES);
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        Err(TransportError::Timeout)
     }
 }

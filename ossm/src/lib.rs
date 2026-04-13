@@ -24,7 +24,7 @@ pub use motion::MotionController;
 pub use motor::{CurrentSensor, Motor, Rs485Motor, SelfHoming, StepDir};
 pub use state::{MotionPhase, MotionState};
 pub use transport::{
-    Modbus, ModbusTransport, Rs485ModbusTransport, StepDirConfig, StepDirError,
+    Modbus, ModbusTransport, ReadNonBlocking, Rs485ModbusTransport, StepDirConfig, StepDirError,
     StepDirMotor, StepOutput, TransportError,
 };
 
