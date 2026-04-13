@@ -10,6 +10,7 @@ rust-version = "1.88"
 
 [dependencies]
 ossm = { path = "../../ossm" }
+ossm-esp = { path = "../../ossm-esp", features = ["esp32s3"] }
 pattern-engine = { path = "../../crates/pattern-engine" }
 m57aim-motor = { path = "../../drivers/m57aim" }
 rs485-board = { path = "../../boards/rs485" }

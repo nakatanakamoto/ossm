@@ -15,7 +15,6 @@ use embassy_time::Delay;
 use embassy_time::{Duration, Ticker};
 use esp_hal::{
     Blocking,
-    gpio::{Level, Output, OutputConfig},
     interrupt::{Priority, software::SoftwareInterruptControl},
     system::Stack,
     timer::timg::TimerGroup,
@@ -28,8 +27,8 @@ use log::info;
 use m57aim_motor::{DEFAULT_DEVICE_ADDR, Modbus, Motor57AIM, Motor57AIMConfig, TARGET_BAUD_RATE};
 use ossm::{MechanicalConfig, MotionController, MotionLimits, Ossm};
 
-use rs485_board::{Rs485Board, Rs485, Rs485ModbusTransport};
 use ossm_m5_remote::RemoteConfig;
+use rs485_board::{Rs485Board, Rs485ModbusTransport};
 
 use pattern_engine::{AnyPattern, PatternEngine};
 use static_cell::StaticCell;
@@ -49,8 +48,7 @@ macro_rules! mk_static {
     }};
 }
 
-type ConcreteTransport =
-    Rs485ModbusTransport<Rs485<Uart<'static, Blocking>, Output<'static>>, Delay>;
+type ConcreteTransport = Rs485ModbusTransport<Uart<'static, Blocking>, Delay>;
 type ConcreteMotor = Motor57AIM<Modbus<ConcreteTransport>, Delay>;
 type ConcreteBoard = Rs485Board<ConcreteMotor>;
 
@@ -93,10 +91,9 @@ async fn main(spawner: Spawner) {
         .with_tx(p.GPIO5)
         .with_rx(p.GPIO6);
 
-    let de = Output::new(p.GPIO3, Level::Low, OutputConfig::default());
-    let rs485 = Rs485::new(uart, de);
+    unsafe { ossm_esp::rs485::enable_uart1_rs485(p.GPIO3) };
 
-    let transport = Rs485ModbusTransport::new(rs485, Delay);
+    let transport = Rs485ModbusTransport::new(uart, Delay);
     let motor = Motor57AIM::new(
         Modbus::new(transport, DEFAULT_DEVICE_ADDR),
         Motor57AIMConfig::default(),
@@ -169,10 +166,17 @@ async fn main(spawner: Spawner) {
         max_travel_mm: limits.max_position_mm - limits.min_position_mm,
     };
 
-    ossm_m5_remote::start(&spawner, manager, sender, receiver, &PATTERNS, remote_config);
+    ossm_m5_remote::start(
+        &spawner,
+        manager,
+        sender,
+        receiver,
+        &PATTERNS,
+        remote_config,
+    );
 
-    let connector = BleConnector::new(radio, p.BT, Default::default())
-        .expect("Could not create BleConnector");
+    let connector =
+        BleConnector::new(radio, p.BT, Default::default()).expect("Could not create BleConnector");
     ble_remote::start(&spawner, connector, &PATTERNS);
 
     let mut pattern_runner = PATTERNS.runner(AnyPattern::all_builtin());

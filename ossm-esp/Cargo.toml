@@ -1,0 +1,14 @@
+[workspace]
+resolver = "3"
+members = ["."]
+
+[package]
+name = "ossm-esp"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+esp32s3 = ["esp-hal/esp32s3"]
+
+[dependencies]
+esp-hal = { version = "~1.0", default-features = false, features = ["unstable"] }
