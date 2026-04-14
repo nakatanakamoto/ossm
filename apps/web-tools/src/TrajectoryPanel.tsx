@@ -44,14 +44,14 @@ function generateTrajectory(
   stroke: number,
   velocity: number,
   sensation: number,
-  timestepMs: number,
   durationSecs: number,
 ): TrajectoryData {
-  const dt = timestepMs / 1000;
+  const rec = getRecorder();
+  const dt = rec.timestep_ms() / 1000;
   const totalSteps = Math.ceil(durationSecs / dt);
 
-  const result = getRecorder().record(
-    pattern, depth, stroke, velocity, sensation, timestepMs, totalSteps,
+  const result = rec.record(
+    pattern, depth, stroke, velocity, sensation, totalSteps,
   );
 
   const stepCount = result.position.length;
@@ -74,15 +74,14 @@ export function useTrajectoryData(inputs: {
   stroke: number;
   velocity: number;
   sensation: number;
-  timestep: number;
   duration: number;
   unitMode: UnitMode;
 }) {
-  const { pattern, depth, stroke, velocity, sensation, timestep, duration, unitMode } = inputs;
+  const { pattern, depth, stroke, velocity, sensation, duration, unitMode } = inputs;
 
   const data = useMemo(
-    () => generateTrajectory(pattern, depth, stroke, velocity, sensation, timestep, duration),
-    [pattern, depth, stroke, velocity, sensation, timestep, duration],
+    () => generateTrajectory(pattern, depth, stroke, velocity, sensation, duration),
+    [pattern, depth, stroke, velocity, sensation, duration],
   );
 
   const rec = getRecorder();
@@ -166,8 +165,6 @@ interface TrajectorySidebarProps extends Omit<ComponentProps<typeof Box>, "child
   onResetDefaults?: () => void;
   duration?: number;
   onDurationValueChange?: (v: number) => void;
-  timestep?: number;
-  onTimestepChange?: (v: number) => void;
   stats?: { duration: number; peakVel: number; peakAccel: number; samples: number } | null;
 }
 
@@ -188,8 +185,6 @@ export function TrajectorySidebar({
   onResetDefaults,
   duration,
   onDurationValueChange,
-  timestep,
-  onTimestepChange,
   stats,
   ...boxProps
 }: TrajectorySidebarProps) {
@@ -245,11 +240,10 @@ export function TrajectorySidebar({
           </>
         )}
 
-        {!compact && duration != null && onDurationValueChange && timestep != null && onTimestepChange && (
+        {!compact && duration != null && onDurationValueChange && (
           <>
             <Separator size="4" />
             <LabeledSlider label="Duration" value={duration} display={`${duration}s`} min={5} max={35} step={1} onChange={onDurationValueChange} />
-            <LabeledSlider label="Timestep" value={timestep} display={`${timestep}ms`} min={1} max={50} step={1} onChange={onTimestepChange} />
           </>
         )}
 

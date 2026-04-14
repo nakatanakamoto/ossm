@@ -9,7 +9,6 @@ const DEFAULTS = {
   stroke: 0.5,
   velocity: 0.75,
   sensation: 0.0,
-  timestep: 20,
   duration: 20,
   unitMode: "relative" as UnitMode,
 };
@@ -22,7 +21,6 @@ export function useTrajectoryInputs() {
   const [stroke, setStroke] = usePersistedState("ossm:stroke", DEFAULTS.stroke);
   const [velocity, setVelocity] = usePersistedState("ossm:velocity", DEFAULTS.velocity);
   const [sensation, setSensation] = usePersistedState("ossm:sensation", DEFAULTS.sensation);
-  const [timestep, setTimestep] = usePersistedState("ossm:timestep", DEFAULTS.timestep);
   const [duration, setDuration] = usePersistedState("ossm:duration", DEFAULTS.duration);
   const [unitMode, setUnitMode] = usePersistedState<UnitMode>("ossm:unitMode", DEFAULTS.unitMode);
 
@@ -32,10 +30,9 @@ export function useTrajectoryInputs() {
     setStroke(DEFAULTS.stroke);
     setVelocity(DEFAULTS.velocity);
     setSensation(DEFAULTS.sensation);
-    setTimestep(DEFAULTS.timestep);
     setDuration(DEFAULTS.duration);
     setUnitMode(DEFAULTS.unitMode);
-  }, [setPattern, setDepth, setStroke, setVelocity, setSensation, setTimestep, setDuration, setUnitMode]);
+  }, [setPattern, setDepth, setStroke, setVelocity, setSensation, setDuration, setUnitMode]);
 
   return {
     pattern, setPattern,
@@ -43,7 +40,6 @@ export function useTrajectoryInputs() {
     stroke, setStroke,
     velocity, setVelocity,
     sensation, setSensation,
-    timestep, setTimestep,
     duration, setDuration,
     unitMode, setUnitMode,
     resetDefaults,
