@@ -82,6 +82,11 @@ impl<T: ModbusTransport, D> Motor57AIM<Modbus<T>, D> {
             .await
     }
 
+    pub async fn set_dir_polarity(&mut self, reverse: bool) -> Result<(), T::Error> {
+        self.write_register(RwRegister::DirPolarity, reverse as u16)
+            .await
+    }
+
     /// Configure the motor for maximum tracking performance.
     ///
     /// Sets speed, acceleration, and output to maximum so the motor acts
@@ -165,7 +170,11 @@ impl<T: ModbusTransport, D: DelayNs> Motor for Motor57AIM<Modbus<T>, D> {
     }
 }
 
-impl<T: ModbusTransport, D: DelayNs> Rs485Motor for Motor57AIM<Modbus<T>, D> {}
+impl<T: ModbusTransport, D: DelayNs> Rs485Motor for Motor57AIM<Modbus<T>, D> {
+    async fn set_dir_polarity(&mut self, reverse: bool) -> Result<(), Self::Error> {
+        Motor57AIM::set_dir_polarity(self, reverse).await
+    }
+}
 
 impl<T: ModbusTransport, D: DelayNs> SelfHoming for Motor57AIM<Modbus<T>, D> {
     async fn home(&mut self) -> Result<(), Self::Error> {

@@ -105,6 +105,7 @@ async fn main(spawner: Spawner) {
     static MECHANICAL: MechanicalConfig = MechanicalConfig {
         pulley_teeth: 20,
         belt_pitch_mm: 2.0,
+        reverse_direction: false,
     };
     let limits = MotionLimits::default();
 

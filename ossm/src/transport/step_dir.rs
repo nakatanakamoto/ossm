@@ -20,7 +20,6 @@ pub struct StepDirConfig {
     /// Maximum output value for the Motor trait. Step/dir drivers handle
     /// current limiting in hardware, so this is largely informational.
     pub max_output: u16,
-    pub reverse_direction: bool,
 }
 
 impl Default for StepDirConfig {
@@ -28,7 +27,6 @@ impl Default for StepDirConfig {
         Self {
             steps_per_rev: 800,
             max_output: 1000,
-            reverse_direction: false,
         }
     }
 }
@@ -92,10 +90,7 @@ where
             return Ok(());
         }
 
-        let forward = delta > 0;
-        let direction_high = forward ^ self.config.reverse_direction;
-
-        if direction_high {
+        if delta > 0 {
             self.dir.set_high().map_err(StepDirError::Pin)?;
         } else {
             self.dir.set_low().map_err(StepDirError::Pin)?;
