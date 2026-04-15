@@ -7,6 +7,9 @@
 pub struct MechanicalConfig {
     pub pulley_teeth: u32,
     pub belt_pitch_mm: f32,
+    /// Flip the sign of commanded positions. Set if the machine moves
+    /// the wrong way for the installed belt orientation.
+    pub reverse_direction: bool,
 }
 
 impl Default for MechanicalConfig {
@@ -14,6 +17,7 @@ impl Default for MechanicalConfig {
         Self {
             pulley_teeth: 20,
             belt_pitch_mm: 2.0,
+            reverse_direction: false,
         }
     }
 }
@@ -29,13 +33,15 @@ impl MechanicalConfig {
         steps_per_rev as f32 / self.mm_per_rev()
     }
 
-    /// Convert mm to steps.
+    /// Convert mm to steps. Flips sign when `reverse_direction` is set.
     pub fn mm_to_steps(&self, mm: f64, steps_per_rev: u32) -> i32 {
+        let mm = if self.reverse_direction { -mm } else { mm };
         (mm * self.steps_per_mm(steps_per_rev) as f64) as i32
     }
 
-    /// Convert steps to mm.
+    /// Convert steps to mm. Flips sign when `reverse_direction` is set.
     pub fn steps_to_mm(&self, steps: i32, steps_per_rev: u32) -> f64 {
-        steps as f64 / self.steps_per_mm(steps_per_rev) as f64
+        let mm = steps as f64 / self.steps_per_mm(steps_per_rev) as f64;
+        if self.reverse_direction { -mm } else { mm }
     }
 }
