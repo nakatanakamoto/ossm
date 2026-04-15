@@ -79,6 +79,8 @@ async fn main(spawner: Spawner) {
         esp_println::println!("{}", line);
     });
 
+    ossm::build_info!();
+
     let p = esp_hal::init(esp_hal::Config::default());
 
     esp_alloc::heap_allocator!(size: 128 * 1024);

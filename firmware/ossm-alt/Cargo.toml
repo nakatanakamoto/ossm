@@ -62,6 +62,9 @@ critical-section = "1.2.0"
 portable-atomic = { version = "1", default-features = false }
 static_cell = "2.1.1"
 
+[build-dependencies]
+ossm-esp-build-support = { path = "../../ossm-esp/build-support" }
+
 [profile.dev]
 opt-level = "s"
 

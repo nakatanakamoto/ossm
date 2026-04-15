@@ -1239,6 +1239,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "ossm-esp-build-support"
+version = "0.1.0"
+
+[[package]]
 name = "ossm-reference"
 version = "0.1.0"
 dependencies = [
@@ -1259,6 +1263,7 @@ dependencies = [
  "m57aim-motor",
  "nb 1.1.0",
  "ossm",
+ "ossm-esp-build-support",
  "pattern-engine",
  "portable-atomic",
  "static_cell",
