@@ -15,6 +15,9 @@ static RECORDER_INPUT: SharedPatternInput = SharedPatternInput::new();
 const LIMITS: MotionLimits = MotionLimits::DEFAULT;
 const RANGE_MM: f64 = LIMITS.max_position_mm - LIMITS.min_position_mm;
 
+// Matches firmware UPDATE_INTERVAL_SECS so the graph reflects what hardware actually does.
+const TIMESTEP_MS: f64 = 10.0;
+
 #[wasm_bindgen]
 pub struct TrajectoryRecorder {}
 
@@ -33,6 +36,10 @@ impl TrajectoryRecorder {
         LIMITS.max_position_mm
     }
 
+    pub fn timestep_ms(&self) -> f64 {
+        TIMESTEP_MS
+    }
+
     /// Record a trajectory returning three `Float32Array`s: position,
     /// velocity, and acceleration (all in the 0-1 domain).
     pub fn record(
@@ -42,10 +49,9 @@ impl TrajectoryRecorder {
         stroke: f64,
         velocity: f64,
         sensation: f64,
-        timestep_ms: f64,
         max_samples: usize,
     ) -> TrajectoryResult {
-        let timestep_secs = timestep_ms / 1000.0;
+        let timestep_secs = TIMESTEP_MS / 1000.0;
 
         let mut planner = RuckigPlanner::new(
             LIMITS.max_velocity_mm_s / RANGE_MM,
@@ -74,7 +80,7 @@ impl TrajectoryRecorder {
             &mut planner,
             input,
             rest_position,
-            timestep_ms,
+            TIMESTEP_MS,
             max_samples,
         );
 

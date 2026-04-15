@@ -199,8 +199,6 @@ export default function SimulatorPage() {
             onUnitModeChange={inputs.setUnitMode}
             duration={inputs.duration}
             onDurationValueChange={inputs.setDuration}
-            timestep={inputs.timestep}
-            onTimestepChange={inputs.setTimestep}
             stats={stats}
             onResetDefaults={inputs.resetDefaults}
           />

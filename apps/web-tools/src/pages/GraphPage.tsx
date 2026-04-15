@@ -53,8 +53,6 @@ export default function GraphPage() {
       onUnitModeChange={inputs.setUnitMode}
       duration={inputs.duration}
       onDurationValueChange={inputs.setDuration}
-      timestep={inputs.timestep}
-      onTimestepChange={inputs.setTimestep}
       stats={stats}
       onResetDefaults={inputs.resetDefaults}
       compact={isMobile}
