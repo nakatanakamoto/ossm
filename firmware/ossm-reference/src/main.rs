@@ -65,7 +65,7 @@ static EXECUTOR_CORE_1: StaticCell<InterruptExecutor<2>> = StaticCell::new();
 // trajectory calculator (heavy float math). 64KB heap is needed for the BLE
 // radio stack's internal allocations. ESP-NOW was dropped to fit within
 // the ESP32's memory constraints.
-static APP_CORE_STACK: StaticCell<Stack<16384>> = StaticCell::new();
+static APP_CORE_STACK: StaticCell<Stack<32768>> = StaticCell::new();
 static MOTION_READY: Signal<CriticalSectionRawMutex, bool> = Signal::new();
 
 #[embassy_executor::task]

@@ -57,7 +57,7 @@ static OSSM: Ossm = Ossm::new();
 static PATTERNS: PatternEngine = PatternEngine::new(&OSSM);
 
 static EXECUTOR_CORE_1: StaticCell<InterruptExecutor<2>> = StaticCell::new();
-static APP_CORE_STACK: StaticCell<Stack<16384>> = StaticCell::new();
+static APP_CORE_STACK: StaticCell<Stack<32768>> = StaticCell::new();
 static MOTION_READY: Signal<CriticalSectionRawMutex, bool> = Signal::new();
 
 #[embassy_executor::task]
