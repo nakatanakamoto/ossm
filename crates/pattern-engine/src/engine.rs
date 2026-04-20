@@ -128,23 +128,11 @@ impl PatternEngine {
         }
     }
 
-    pub fn input(&self) -> &SharedPatternInput {
+    pub(crate) fn input(&self) -> &SharedPatternInput {
         &self.input
     }
 
-    /// Create an async subscriber that receives [`EngineState`] on every
-    /// state transition.
-    ///
-    /// Returns `Err` if all subscriber slots are in use.
-    ///
-    /// ```ignore
-    /// let mut sub = engine.state_subscriber()?;
-    /// loop {
-    ///     let state = sub.next_message_pure().await;
-    ///     // react to state change …
-    /// }
-    /// ```
-    pub fn state_subscriber(
+    pub(crate) fn state_subscriber(
         &self,
     ) -> Result<pubsub::Subscriber<'_, CriticalSectionRawMutex, EngineState, 1, 8, 0>, pubsub::Error>
     {
@@ -162,32 +150,32 @@ impl PatternEngine {
         }
     }
 
-    pub fn ossm(&self) -> &Ossm {
+    pub(crate) fn ossm(&self) -> &Ossm {
         self.ossm
     }
 
-    pub fn play(&self, index: usize) {
+    pub(crate) fn play(&self, index: usize) {
         let _ = self.channels.commands.try_send(EngineCommand::Play(index));
     }
 
-    pub fn pause(&self) {
+    pub(crate) fn pause(&self) {
         let _ = self.channels.commands.try_send(EngineCommand::Pause);
     }
 
-    pub fn resume(&self) {
+    pub(crate) fn resume(&self) {
         let _ = self.channels.commands.try_send(EngineCommand::Resume);
     }
 
-    pub fn stop(&self) {
+    pub(crate) fn stop(&self) {
         let _ = self.channels.commands.try_send(EngineCommand::Stop);
         self.input.sender().send(PatternInput::DEFAULT);
     }
 
-    pub fn home(&self) {
+    pub(crate) fn home(&self) {
         let _ = self.channels.commands.try_send(EngineCommand::Home);
     }
 
-    pub fn state(&self) -> EngineState {
+    pub(crate) fn state(&self) -> EngineState {
         self.channels.state()
     }
 

@@ -1,5 +1,6 @@
 #![no_std]
 
+pub mod commands;
 mod engine;
 mod input;
 mod pattern;

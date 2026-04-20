@@ -87,13 +87,13 @@ impl Ossm {
     pub fn begin_motion(&self, cmd: MotionCommand) {
         self.channels.move_resp.reset();
         let _ = self.channels.move_cmd.try_receive();
-        let _ = self.channels.move_cmd.try_send(cmd);
+        let _ = self.channels.move_cmd.try_send(cmd.clamped());
     }
 
     /// Update the target of an in-flight motion without resetting the completion signal.
     pub fn update_motion(&self, cmd: MotionCommand) {
         let _ = self.channels.move_cmd.try_receive();
-        let _ = self.channels.move_cmd.try_send(cmd);
+        let _ = self.channels.move_cmd.try_send(cmd.clamped());
     }
 
     /// Wait for the current in-flight motion to complete.

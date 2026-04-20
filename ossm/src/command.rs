@@ -39,6 +39,16 @@ pub struct MotionCommand {
     pub torque: Option<f64>,
 }
 
+impl MotionCommand {
+    pub fn clamped(self) -> Self {
+        Self {
+            position: self.position.clamp(0.0, 1.0),
+            speed: self.speed.clamp(0.0, 1.0),
+            torque: self.torque.map(|t| t.clamp(0.0, 1.0)),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum StateCommand {
     Enable,
