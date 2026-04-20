@@ -5,7 +5,7 @@ use embedded_hal::digital::OutputPin;
 /// Abstracts step-pulse generation.
 ///
 /// The firmware layer provides a concrete implementation (e.g. MCPWM on ESP32).
-/// The driver only cares that `count` pulses are produced — timing, duty cycle,
+/// The driver only cares that `count` pulses are produced - timing, duty cycle,
 /// and hardware details live behind this trait.
 #[allow(async_fn_in_trait)]
 pub trait StepOutput {

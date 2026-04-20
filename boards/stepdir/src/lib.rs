@@ -151,7 +151,7 @@ where
         // Crawl backward (toward home) until stall
         self.crawl_until_stall(Direction::Forward, offset).await?;
 
-        // Zero at the hard stop — the controller will move to min_position_mm
+        // Zero at the hard stop - the controller will move to min_position_mm
         self.motor.reset_position(0);
 
         info!("Homing complete");
