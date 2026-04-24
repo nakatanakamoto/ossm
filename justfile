@@ -5,41 +5,41 @@ set dotenv-load := true
 default:
     @just --list
 
-# OSSM Alt (ESP32-S3)
-[working-directory: 'firmware/ossm-alt']
-build-ossm-alt:
-    cargo +esp build --release
+# OSSM Alt (ESP32-S3). Pass motor=sim to swap in the simulated motor.
+[working-directory: 'firmware/esp32s3']
+build-ossm-alt motor="rs485":
+    cargo +esp build --release --bin ossm-alt --features motor-{{ motor }}
 
-[working-directory: 'firmware/ossm-alt']
-flash-ossm-alt:
-    cargo +esp run --release
+[working-directory: 'firmware/esp32s3']
+flash-ossm-alt motor="rs485":
+    cargo +esp run --release --bin ossm-alt --features motor-{{ motor }}
 
-# Waveshare ESP32-S3-RS485-CAN
-[working-directory: 'firmware/waveshare']
-build-waveshare:
-    cargo +esp build --release
+# Waveshare ESP32-S3-RS485-CAN. Pass motor=sim to swap in the simulated motor.
+[working-directory: 'firmware/esp32s3']
+build-waveshare motor="rs485":
+    cargo +esp build --release --bin waveshare --features motor-{{ motor }}
 
-[working-directory: 'firmware/waveshare']
-flash-waveshare:
-    cargo +esp run --release
+[working-directory: 'firmware/esp32s3']
+flash-waveshare motor="rs485":
+    cargo +esp run --release --bin waveshare --features motor-{{ motor }}
 
-# Seeed Studio XIAO ESP32-S3
-[working-directory: 'firmware/seeed-xiao']
-build-seeed-xiao:
-    cargo +esp build --release
+# Seeed Studio XIAO ESP32-S3. Pass motor=sim to swap in the simulated motor.
+[working-directory: 'firmware/esp32s3']
+build-seeed-xiao motor="rs485":
+    cargo +esp build --release --bin seeed-xiao --features motor-{{ motor }}
 
-[working-directory: 'firmware/seeed-xiao']
-flash-seeed-xiao:
-    cargo +esp run --release
+[working-directory: 'firmware/esp32s3']
+flash-seeed-xiao motor="rs485":
+    cargo +esp run --release --bin seeed-xiao --features motor-{{ motor }}
 
-# OSSM Reference (ESP32)
-[working-directory: 'firmware/ossm-reference']
-build-ossm-reference:
-    cargo +esp build --release
+# OSSM Reference (ESP32). Pass motor=sim to swap in the simulated motor.
+[working-directory: 'firmware/esp32']
+build-ossm-reference motor="stepdir":
+    cargo +esp build --release --bin ossm-reference --features motor-{{ motor }}
 
-[working-directory: 'firmware/ossm-reference']
-flash-ossm-reference:
-    cargo +esp run --release
+[working-directory: 'firmware/esp32']
+flash-ossm-reference motor="stepdir":
+    cargo +esp run --release --bin ossm-reference --features motor-{{ motor }}
 
 
 # WASM Simulator
@@ -62,7 +62,7 @@ build-wasm: build-wasm-simulator build-wasm-recorder
 
 # Dev server (watches Rust sources and hot-reloads WASM)
 [working-directory: 'apps/web-tools']
-dev-patterns: build-wasm
+web-tools: build-wasm
     pnpm dev --host
 
 # All

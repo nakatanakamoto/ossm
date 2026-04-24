@@ -39,7 +39,7 @@ pub unsafe fn enable_uart1_rs485(de_pin: impl OutputPin) {
     let system = unsafe { &*esp_hal::peripherals::SYSTEM::ptr() };
     assert!(
         system.perip_clk_en0().read().uart1_clk_en().bit_is_set(),
-        "UART1 peripheral clock is not enabled — call Uart::new() first"
+        "UART1 peripheral clock is not enabled - call Uart::new() first"
     );
 
     // Configure the pin's IO_MUX so it's in a known electrical state
