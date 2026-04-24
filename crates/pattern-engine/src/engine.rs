@@ -168,7 +168,11 @@ impl PatternEngine {
 
     pub(crate) fn stop(&self) {
         let _ = self.channels.commands.try_send(EngineCommand::Stop);
-        self.input.sender().send(PatternInput::DEFAULT);
+        self.input.sender().send_modify(|opt| {
+            if let Some(input) = opt {
+                input.velocity = 0.0;
+            }
+        });
     }
 
     pub(crate) fn home(&self) {
