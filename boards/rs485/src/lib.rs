@@ -30,11 +30,7 @@ impl<M: Rs485Motor + SelfHoming> Board for Rs485Board<M> {
     type Error = BoardError<M::Error>;
 
     async fn enable(&mut self) -> Result<(), Self::Error> {
-        self.motor.enable().await.map_err(BoardError::Motor)?;
-        self.motor
-            .set_dir_polarity(self.mechanical.reverse_direction)
-            .await
-            .map_err(BoardError::Motor)
+        self.motor.enable().await.map_err(BoardError::Motor)
     }
 
     async fn disable(&mut self) -> Result<(), Self::Error> {
@@ -42,6 +38,10 @@ impl<M: Rs485Motor + SelfHoming> Board for Rs485Board<M> {
     }
 
     async fn home(&mut self) -> Result<(), Self::Error> {
+        self.motor
+            .set_dir_polarity(self.mechanical.reverse_direction)
+            .await
+            .map_err(BoardError::Motor)?;
         self.motor.home().await.map_err(BoardError::Motor)
     }
 

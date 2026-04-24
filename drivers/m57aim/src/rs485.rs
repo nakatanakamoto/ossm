@@ -82,6 +82,8 @@ impl<T: ModbusTransport, D> Motor57AIM<Modbus<T>, D> {
             .await
     }
 
+    /// Write to the motor's DirPolarity register (running value only; does not
+    /// persist to EEPROM unless `ParameterSaveFlag` is also written).
     pub async fn set_dir_polarity(&mut self, reverse: bool) -> Result<(), T::Error> {
         self.write_register(RwRegister::DirPolarity, reverse as u16)
             .await
