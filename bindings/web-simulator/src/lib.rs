@@ -3,7 +3,10 @@ use alloc::string::String;
 
 use embassy_time::{Delay, Duration, Ticker};
 use ossm::{MechanicalConfig, MotionLimits, Ossm};
-use pattern_engine::{AnyPattern, PatternEngine};
+use pattern_engine::{
+    AnyPattern, PatternEngine,
+    commands::{self, InputCommand, PlaybackCommand},
+};
 use sim_board::SimBoard;
 use sim_motor::SimMotor;
 use wasm_bindgen::prelude::*;
@@ -64,7 +67,7 @@ impl Simulator {
     }
 
     pub fn get_engine_state(&self) -> u8 {
-        PATTERNS.state().as_u8()
+        commands::current_state(&PATTERNS).as_u8()
     }
 
     pub fn get_position(&self) -> f32 {
@@ -72,68 +75,51 @@ impl Simulator {
     }
 
     pub fn set_depth(&self, depth: f64) {
-        PATTERNS.input().sender().send_modify(|opt| {
-            if let Some(input) = opt {
-                input.depth = depth;
-            }
-        });
+        commands::dispatch_input(&PATTERNS, InputCommand::SetDepth(depth));
     }
 
     pub fn set_stroke(&self, stroke: f64) {
-        PATTERNS.input().sender().send_modify(|opt| {
-            if let Some(input) = opt {
-                input.stroke = stroke;
-            }
-        });
+        commands::dispatch_input(&PATTERNS, InputCommand::SetStroke(stroke));
     }
 
     pub fn set_velocity(&self, velocity: f64) {
-        PATTERNS.input().sender().send_modify(|opt| {
-            if let Some(input) = opt {
-                input.velocity = velocity;
-            }
-        });
+        commands::dispatch_input(&PATTERNS, InputCommand::SetSpeed(velocity));
     }
 
     pub fn set_sensation(&self, sensation: f64) {
-        PATTERNS.input().sender().send_modify(|opt| {
-            if let Some(input) = opt {
-                input.sensation = sensation;
-            }
-        });
+        commands::dispatch_input(&PATTERNS, InputCommand::SetSensation(sensation));
     }
 
     pub fn play(&self, index: usize) {
-        PATTERNS.play(index);
+        commands::dispatch_playback(&PATTERNS, PlaybackCommand::Play(index));
     }
 
     pub fn pause(&self) {
-        PATTERNS.pause();
+        commands::dispatch_playback(&PATTERNS, PlaybackCommand::Pause);
     }
 
     pub fn resume(&self) {
-        PATTERNS.resume();
+        commands::dispatch_playback(&PATTERNS, PlaybackCommand::Resume);
     }
 
     pub fn stop(&self) {
-        PATTERNS.stop();
+        commands::dispatch_playback(&PATTERNS, PlaybackCommand::Stop);
     }
 
     pub fn pattern_count(&self) -> usize {
-        AnyPattern::BUILTIN_PATTERNS.len()
+        commands::pattern_list().len()
     }
 
     pub fn pattern_name(&self, index: usize) -> String {
-        AnyPattern::BUILTIN_PATTERNS
+        commands::pattern_list()
             .get(index)
             .map(|p| String::from(p.name))
             .unwrap_or_default()
     }
 
     pub fn pattern_description(&self, index: usize) -> String {
-        AnyPattern::BUILTIN_PATTERNS
-            .get(index)
-            .map(|p| String::from(p.description))
+        commands::pattern_description(index)
+            .map(String::from)
             .unwrap_or_default()
     }
 }

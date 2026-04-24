@@ -17,7 +17,10 @@ use embassy_time::{Duration, Ticker, Timer};
 use esp_radio::ble::controller::BleConnector;
 use heapless::String;
 use log::{error, info, warn};
-use pattern_engine::{AnyPattern, EngineState, PatternEngine};
+use pattern_engine::{
+    EngineState, PatternEngine, PatternInput,
+    commands::{self, InputCommand, PlaybackCommand},
+};
 use static_cell::StaticCell;
 use trouble_host::prelude::*;
 
@@ -63,7 +66,7 @@ struct OssmService {
 fn get_all_patterns_json() -> String<MAX_PATTERN_LENGTH> {
     let mut output: String<MAX_PATTERN_LENGTH> = String::new();
     output.write_char('[').ok();
-    for (i, meta) in AnyPattern::BUILTIN_PATTERNS.iter().enumerate() {
+    for (i, meta) in commands::pattern_list().iter().enumerate() {
         let rollback = output.len();
         let sep = if i > 0 { "," } else { "" };
         if write!(output, r#"{sep}{{"name":"{}","idx":{i}}}"#, meta.name).is_err()
@@ -81,10 +84,7 @@ fn get_all_patterns_json() -> String<MAX_PATTERN_LENGTH> {
 fn get_pattern_description(index: usize) -> String<MAX_PATTERN_LENGTH> {
     let mut output = String::new();
 
-    let description = AnyPattern::BUILTIN_PATTERNS
-        .get(index)
-        .map(|m| m.description)
-        .unwrap_or("Invalid pattern index");
+    let description = commands::pattern_description(index).unwrap_or("Invalid pattern index");
 
     if output.push_str(description).is_err() {
         output
@@ -197,7 +197,7 @@ pub async fn ble_events_task(
                     },
                 }
 
-                engine.stop();
+                commands::dispatch_playback(engine, PlaybackCommand::Stop);
                 info!("BLE session ended, stopping engine");
             }
             Err(err) => {
@@ -232,9 +232,8 @@ async fn gatt_events_task<P: PacketPool>(
                 match &event {
                     GattEvent::Read(event) => {
                         if event.handle() == server.ossm_service.current_state.handle {
-                            use pattern_engine::PatternInput;
-                            let engine_state = engine.state();
-                            let input = engine.input().try_get().unwrap_or(PatternInput::DEFAULT);
+                            let engine_state = commands::current_state(engine);
+                            let input = commands::current_input(engine);
                             let state_json = state_to_json(engine_state, &input);
                             server.set(&server.ossm_service.current_state, &state_json)?;
                         }
@@ -334,20 +333,17 @@ async fn state_notifications<P: PacketPool>(
     connection: &GattConnection<'_, '_, P>,
     engine: &'static PatternEngine,
 ) -> Result<(), Error> {
-    use pattern_engine::PatternInput;
-
-    let mut sub = engine
-        .state_subscriber()
-        .expect("No state subscriber slots available");
+    let mut sub =
+        commands::subscribe_state(engine).expect("No state subscriber slots available");
     let mut heartbeat = Ticker::every(Duration::from_secs(1));
 
     loop {
         let engine_state = match select(sub.next_message_pure(), heartbeat.next()).await {
             Either::First(state) => state,
-            Either::Second(_) => engine.state(),
+            Either::Second(_) => commands::current_state(engine),
         };
 
-        let input = engine.input().try_get().unwrap_or(PatternInput::DEFAULT);
+        let input = commands::current_input(engine);
         let state_json = state_to_json(engine_state, &input);
         server
             .ossm_service
@@ -357,12 +353,9 @@ async fn state_notifications<P: PacketPool>(
     }
 }
 
-fn state_to_json(
-    state: EngineState,
-    input: &pattern_engine::PatternInput,
-) -> String<MAX_STATE_LENGTH> {
+fn state_to_json(state: EngineState, input: &PatternInput) -> String<MAX_STATE_LENGTH> {
     let pattern_name = match state {
-        EngineState::Playing(idx) | EngineState::Paused(idx) => AnyPattern::BUILTIN_PATTERNS
+        EngineState::Playing(idx) | EngineState::Paused(idx) => commands::pattern_list()
             .get(idx)
             .map(|m| m.name)
             .unwrap_or(""),
@@ -409,42 +402,29 @@ fn process_command(
                 "set" => {
                     if let Some(value) = split_command.next() {
                         if let Ok(value) = value.parse::<u32>() {
-                            let clamped_value = (value as f64 / 100.0).clamp(0.0, 1.0);
+                            let normalized = value as f64 / 100.0;
                             match action {
-                                "speed" => {
-                                    engine.input().sender().send_modify(|opt| {
-                                        if let Some(input) = opt {
-                                            input.velocity = clamped_value;
-                                        }
-                                    });
-                                }
-                                "stroke" => {
-                                    engine.input().sender().send_modify(|opt| {
-                                        if let Some(input) = opt {
-                                            input.stroke = clamped_value;
-                                        }
-                                    });
-                                }
-                                "depth" => {
-                                    engine.input().sender().send_modify(|opt| {
-                                        if let Some(input) = opt {
-                                            input.depth = clamped_value;
-                                        }
-                                    });
-                                }
-                                "sensation" => {
-                                    // BLE sends 0–100 (matching reference protocol).
-                                    // Map to internal -1.0..1.0 range.
-                                    let sensation = (clamped_value * 2.0 - 1.0).clamp(-1.0, 1.0);
-                                    engine.input().sender().send_modify(|opt| {
-                                        if let Some(input) = opt {
-                                            input.sensation = sensation;
-                                        }
-                                    });
-                                }
-                                "pattern" => {
-                                    engine.play(value as usize);
-                                }
+                                "speed" => commands::dispatch_input(
+                                    engine,
+                                    InputCommand::SetSpeed(normalized),
+                                ),
+                                "stroke" => commands::dispatch_input(
+                                    engine,
+                                    InputCommand::SetStroke(normalized),
+                                ),
+                                "depth" => commands::dispatch_input(
+                                    engine,
+                                    InputCommand::SetDepth(normalized),
+                                ),
+                                // BLE sends 0–100; internal range is -1.0..1.0.
+                                "sensation" => commands::dispatch_input(
+                                    engine,
+                                    InputCommand::SetSensation(normalized * 2.0 - 1.0),
+                                ),
+                                "pattern" => commands::dispatch_playback(
+                                    engine,
+                                    PlaybackCommand::Play(value as usize),
+                                ),
                                 _ => {
                                     error!("Invalid set command {}", action);
                                     fail = true;
@@ -460,9 +440,10 @@ fn process_command(
                     }
                 }
                 "go" => match action {
-                    "simplePenetration" => engine.play(0),
-                    "strokeEngine" => engine.play(0),
-                    "menu" => engine.stop(),
+                    "simplePenetration" | "strokeEngine" => {
+                        commands::dispatch_playback(engine, PlaybackCommand::Play(0))
+                    }
+                    "menu" => commands::dispatch_playback(engine, PlaybackCommand::Stop),
                     _ => {
                         error!("Unknown go action: {}", action);
                         fail = true;

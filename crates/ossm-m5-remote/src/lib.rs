@@ -10,7 +10,10 @@ use esp_radio::esp_now::{
     BROADCAST_ADDRESS, EspNowManager, EspNowReceiver, EspNowSender, PeerInfo,
 };
 use log::{error, info};
-use pattern_engine::PatternEngine;
+use pattern_engine::{
+    PatternEngine,
+    commands::{self, InputCommand, PlaybackCommand},
+};
 use portable_atomic::{AtomicU32, AtomicU64};
 use zerocopy::{Immutable, IntoBytes, KnownLayout, TryFromBytes};
 
@@ -238,7 +241,7 @@ async fn receiver_task(
                 }
                 let current = CURRENT_PATTERN_IDX.load(Ordering::Acquire) as usize;
                 info!("Playing pattern {}", current);
-                engine.play(current);
+                commands::dispatch_playback(engine, PlaybackCommand::Play(current));
             }
             M5Command::Off => {
                 let ack = M5Packet {
@@ -252,41 +255,25 @@ async fn receiver_task(
                         error!("Could not send OFF ack: {}", err);
                     }
                 }
-                engine.pause();
+                commands::dispatch_playback(engine, PlaybackCommand::Pause);
                 info!("Paused");
             }
             M5Command::Speed => {
                 let velocity = (packet.value as f64) / config.max_velocity_mm_s;
-                engine.input().sender().send_modify(|opt| {
-                    if let Some(input) = opt {
-                        input.velocity = velocity.clamp(0.0, 1.0);
-                    }
-                });
+                commands::dispatch_input(engine, InputCommand::SetSpeed(velocity));
             }
             M5Command::Depth => {
                 let depth = (packet.value as f64) / config.max_travel_mm;
-                engine.input().sender().send_modify(|opt| {
-                    if let Some(input) = opt {
-                        input.depth = depth.clamp(0.0, 1.0);
-                    }
-                });
+                commands::dispatch_input(engine, InputCommand::SetDepth(depth));
             }
             M5Command::Stroke => {
                 let stroke = (packet.value as f64) / config.max_travel_mm;
-                engine.input().sender().send_modify(|opt| {
-                    if let Some(input) = opt {
-                        input.stroke = stroke.clamp(0.0, 1.0);
-                    }
-                });
+                commands::dispatch_input(engine, InputCommand::SetStroke(stroke));
             }
             M5Command::Sensation => {
                 // Remote sends -100..100; pattern engine expects -1.0..1.0
-                let sensation = ((packet.value as f64) / 100.0).clamp(-1.0, 1.0);
-                engine.input().sender().send_modify(|opt| {
-                    if let Some(input) = opt {
-                        input.sensation = sensation;
-                    }
-                });
+                let sensation = (packet.value as f64) / 100.0;
+                commands::dispatch_input(engine, InputCommand::SetSensation(sensation));
             }
             M5Command::Pattern => {
                 let remote_idx = packet.value as u32;
@@ -294,7 +281,10 @@ async fn receiver_task(
                     let engine_idx = pattern.to_engine_index();
                     CURRENT_PATTERN_IDX.store(engine_idx, Ordering::Release);
                     info!("Switching to pattern {}", engine_idx);
-                    engine.play(engine_idx as usize);
+                    commands::dispatch_playback(
+                        engine,
+                        PlaybackCommand::Play(engine_idx as usize),
+                    );
                 }
             }
             M5Command::Heartbeat => {
@@ -367,7 +357,7 @@ async fn heartbeat_check_task(engine: &'static PatternEngine) {
 
         if was_connected && !is_connected {
             info!("Remote disconnected, heartbeat lost");
-            engine.pause();
+            commands::dispatch_playback(engine, PlaybackCommand::Pause);
         } else if !was_connected && is_connected {
             info!("Remote connected");
         }
