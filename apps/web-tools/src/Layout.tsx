@@ -41,6 +41,9 @@ export default function Layout() {
           >
             <Text size="3" weight="bold">
               ossm-rs
+              <Text as="span" color="gray" ml="1" style={{ verticalAlign: "super", fontSize: "0.6em", fontWeight: "bold" }}>
+                BETA
+              </Text>
             </Text>
             <Drawer.Root direction="right" open={menuOpen} onOpenChange={setMenuOpen}>
               <Drawer.Trigger asChild>
@@ -71,7 +74,12 @@ export default function Layout() {
                   <Theme accentColor="purple" radius="large" appearance={appearance} style={{ height: "100%", borderLeft: "1px solid var(--gray-5)" }}>
                   <Flex direction="column" gap="1" p="4" style={{ height: "100%" }}>
                     <Drawer.Title asChild>
-                      <Text size="4" weight="bold" mb="3">ossm-rs</Text>
+                      <Text size="4" weight="bold" mb="3">
+                        ossm-rs
+                        <Text as="span" color="gray" ml="1" style={{ verticalAlign: "super", fontSize: "0.6em", fontWeight: "bold" }}>
+                          BETA
+                        </Text>
+                      </Text>
                     </Drawer.Title>
 
                     <NavLink to="/simulator" end onClick={() => setMenuOpen(false)} style={{ textDecoration: "none" }}>
@@ -135,6 +143,9 @@ export default function Layout() {
             <Flex align="center" gap="4">
               <Text size="3" weight="bold">
                 ossm-rs
+                <Text as="span" color="gray" ml="1" style={{ verticalAlign: "super", fontSize: "0.6em", fontWeight: "bold" }}>
+                  BETA
+                </Text>
               </Text>
               <TabNav.Root>
                 <NavLink to="/simulator" end>
